@@ -1,0 +1,29 @@
+.env
+.env.local
+.env.*
+!/.env.example
+
+# .NET
+**/bin/
+**/obj/
+*.user
+
+# Node/Vite
+**/node_modules/
+frontend-web/dist/
+
+# Flutter
+myfschoolse1910/.dart_tool/
+myfschoolse1910/build/
+
+# QA generated state
+qa/.env.e2e.generated
+qa/artifacts/
+qa/**/test-results/
+qa/**/playwright-report/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
