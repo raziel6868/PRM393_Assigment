@@ -28,7 +28,10 @@ public sealed class MyFSchoolDbContext(DbContextOptions<MyFSchoolDbContext> opti
 
         builder.Entity<AppUser>(entity =>
         {
-            entity.ToTable("Users");
+            entity.ToTable("Users", table => table.HasCheckConstraint(
+                "CK_Users_TemporaryPasswordState",
+                "([MustChangePassword] = 1 AND [TemporaryPasswordExpiresAtUtc] IS NOT NULL) OR " +
+                "([MustChangePassword] = 0 AND [TemporaryPasswordExpiresAtUtc] IS NULL)"));
             entity.Property(user => user.DisplayName).HasMaxLength(200);
             entity.Property(user => user.CreatedAtUtc).HasPrecision(0);
             entity.Property(user => user.UpdatedAtUtc).HasPrecision(0);

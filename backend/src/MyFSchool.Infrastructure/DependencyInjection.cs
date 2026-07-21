@@ -4,7 +4,9 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.DataProtection;
+using System.Text;
 using MyFSchool.Application.Readiness;
+using MyFSchool.Application.Identity;
 using MyFSchool.Infrastructure.Configuration;
 using MyFSchool.Infrastructure.Readiness;
 using MyFSchool.Infrastructure.Identity;
@@ -38,6 +40,29 @@ public static class DependencyInjection
 
         services.AddDbContext<MyFSchoolDbContext>(options => options.UseSqlServer(connectionString));
         services.AddDataProtection();
+        services.AddSingleton(TimeProvider.System);
+        services
+            .AddOptions<AuthOptions>()
+            .Bind(configuration.GetSection(AuthOptions.SectionName))
+            .Validate(options => !string.IsNullOrWhiteSpace(options.Issuer), "Missing required setting: Auth__Issuer")
+            .Validate(options => !string.IsNullOrWhiteSpace(options.Audience), "Missing required setting: Auth__Audience")
+            .Validate(options => Encoding.UTF8.GetByteCount(options.JwtSigningKey) >= 32, "Auth__JwtSigningKey must contain at least 32 bytes")
+            .Validate(options => options.AccessTokenMinutes is >= 1 and <= 60, "Auth__AccessTokenMinutes must be between 1 and 60")
+            .Validate(options => options.RestrictedTokenMinutes is >= 1 and <= 15, "Auth__RestrictedTokenMinutes must be between 1 and 15")
+            .Validate(options => options.RefreshTokenDays is >= 1 and <= 30, "Auth__RefreshTokenDays must be between 1 and 30")
+            .Validate(options => options.TemporaryPasswordHours is >= 1 and <= 72, "Auth__TemporaryPasswordHours must be between 1 and 72")
+            .ValidateOnStart();
+        services
+            .AddOptions<BootstrapOptions>()
+            .Bind(configuration.GetSection(BootstrapOptions.SectionName))
+            .Validate(
+                options => !options.Enabled ||
+                    (!string.IsNullOrWhiteSpace(options.AdministratorUserName) &&
+                     !string.IsNullOrWhiteSpace(options.AdministratorEmail) &&
+                     !string.IsNullOrWhiteSpace(options.AdministratorDisplayName) &&
+                     !string.IsNullOrWhiteSpace(options.AdministratorPassword)),
+                "Bootstrap Administrator settings are required when Bootstrap__Enabled is true")
+            .ValidateOnStart();
         services
             .AddIdentityCore<AppUser>(options =>
             {
@@ -53,6 +78,9 @@ public static class DependencyInjection
             .AddRoles<AppRole>()
             .AddEntityFrameworkStores<MyFSchoolDbContext>()
             .AddDefaultTokenProviders();
+        services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IAccountAdministrationService, AccountAdministrationService>();
+        services.AddScoped<IIdentityBootstrapper, IdentityBootstrapper>();
 
         services
             .AddOptions<StorageOptions>()

@@ -1,9 +1,143 @@
+using System.Security.Claims;
+using System.Text;
+using System.Text.Json;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.IdentityModel.Tokens;
+using MyFSchool.Api.Identity;
+using MyFSchool.Application.Identity;
 using MyFSchool.Infrastructure;
+using MyFSchool.Infrastructure.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
-builder.Services.AddAuthorization();
+builder.Services.Configure<ApiBehaviorOptions>(options =>
+{
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        var errors = context.ModelState
+            .Where(entry => entry.Value?.Errors.Count > 0)
+            .ToDictionary(
+                entry => JsonNamingPolicy.CamelCase.ConvertName(entry.Key),
+                entry => entry.Value!.Errors
+                    .Select(error => string.IsNullOrWhiteSpace(error.ErrorMessage)
+                        ? "Giá trị không hợp lệ."
+                        : error.ErrorMessage)
+                    .ToArray());
+        var problem = new ValidationProblemDetails(errors)
+        {
+            Status = StatusCodes.Status400BadRequest,
+            Title = "Yêu cầu không hợp lệ",
+            Detail = "Vui lòng kiểm tra các trường được đánh dấu."
+        };
+        problem.Extensions["code"] = "validationFailed";
+        problem.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
+        return new BadRequestObjectResult(problem);
+    };
+});
+var configuredWebOrigins = builder.Configuration
+    .GetSection(WebOriginOptions.SectionName)
+    .Get<WebOriginOptions>() ?? new WebOriginOptions();
+builder.Services
+    .AddOptions<WebOriginOptions>()
+    .Bind(builder.Configuration.GetSection(WebOriginOptions.SectionName))
+    .Validate(options => WebOriginOptions.AreValid(options.AllowedOrigins),
+        "WebOrigins__AllowedOrigins must contain at least one valid HTTP or HTTPS origin")
+    .ValidateOnStart();
+builder.Services.AddCors(options => options.AddPolicy("web-client", policy => policy
+    .WithOrigins(configuredWebOrigins.AllowedOrigins)
+    .AllowAnyHeader()
+    .AllowAnyMethod()
+    .AllowCredentials()));
+var configuredSigningKey = builder.Configuration["Auth:JwtSigningKey"] ?? string.Empty;
+var signingKey = Encoding.UTF8.GetByteCount(configuredSigningKey) >= 32
+    ? configuredSigningKey
+    : new string('0', 32);
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.MapInboundClaims = false;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = builder.Configuration["Auth:Issuer"],
+            ValidateAudience = true,
+            ValidAudience = builder.Configuration["Auth:Audience"],
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey)),
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromSeconds(30),
+            NameClaimType = "sub",
+            RoleClaimType = ClaimTypes.Role
+        };
+        options.Events = new JwtBearerEvents
+        {
+            OnChallenge = async context =>
+            {
+                context.HandleResponse();
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                var problemService = context.HttpContext.RequestServices.GetRequiredService<IProblemDetailsService>();
+                await problemService.WriteAsync(new ProblemDetailsContext
+                {
+                    HttpContext = context.HttpContext,
+                    ProblemDetails = CreateAuthProblem(401, "unauthorized", "Chưa đăng nhập", "Vui lòng đăng nhập để tiếp tục.")
+                });
+            },
+            OnForbidden = async context =>
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                var problemService = context.HttpContext.RequestServices.GetRequiredService<IProblemDetailsService>();
+                await problemService.WriteAsync(new ProblemDetailsContext
+                {
+                    HttpContext = context.HttpContext,
+                    ProblemDetails = CreateAuthProblem(403, "forbidden", "Không có quyền truy cập", "Bạn không có quyền thực hiện thao tác này.")
+                });
+            }
+        };
+    });
+builder.Services.AddAuthorization(options =>
+{
+    options.DefaultPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .RequireClaim("passwordChangeRequired", "false")
+        .Build();
+    options.AddPolicy(SchoolPolicies.AuthenticatedSession, policy => policy.RequireAuthenticatedUser());
+    options.AddPolicy(SchoolPolicies.Administrator, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireRole(SchoolRoles.ToWire(SchoolRoles.Administrator))
+        .RequireClaim("passwordChangeRequired", "false"));
+});
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddPolicy("sign-in", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 20,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        }));
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        var problemService = context.HttpContext.RequestServices.GetRequiredService<IProblemDetailsService>();
+        await problemService.WriteAsync(new ProblemDetailsContext
+        {
+            HttpContext = context.HttpContext,
+            ProblemDetails = CreateAuthProblem(
+                429,
+                "tooManyRequests",
+                "Quá nhiều yêu cầu",
+                "Vui lòng chờ một lát rồi thử lại.")
+        });
+    };
+});
 builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails(options =>
 {
@@ -32,6 +166,7 @@ builder.Services.AddProblemDetails(options =>
     };
 });
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment.ContentRootPath);
+builder.Services.AddSingleton<IAccessTokenIssuer, JwtAccessTokenIssuer>();
 
 var app = builder.Build();
 
@@ -55,8 +190,24 @@ app.Use(async (context, next) =>
 
     await next(context);
 });
+app.UseCors("web-client");
+app.UseRateLimiter();
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    await scope.ServiceProvider.GetRequiredService<IIdentityBootstrapper>()
+        .InitializeAsync(CancellationToken.None);
+}
+
 app.Run();
+
+static ProblemDetails CreateAuthProblem(int status, string code, string title, string detail)
+{
+    var problem = new ProblemDetails { Status = status, Title = title, Detail = detail };
+    problem.Extensions["code"] = code;
+    return problem;
+}
