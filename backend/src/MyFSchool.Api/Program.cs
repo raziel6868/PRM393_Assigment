@@ -9,13 +9,25 @@ builder.Services.AddProblemDetails(options =>
 {
     options.CustomizeProblemDetails = context =>
     {
-        context.ProblemDetails.Extensions["code"] = "unexpectedError";
         context.ProblemDetails.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
 
-        if (context.ProblemDetails.Status >= StatusCodes.Status500InternalServerError)
+        if (context.ProblemDetails.Status == StatusCodes.Status404NotFound)
         {
+            context.ProblemDetails.Extensions["code"] = "notFound";
+            context.ProblemDetails.Title = "Không tìm thấy tài nguyên";
+            context.ProblemDetails.Detail = "Tài nguyên bạn yêu cầu không tồn tại hoặc bạn không có quyền truy cập.";
+        }
+        else if (context.ProblemDetails.Status >= StatusCodes.Status500InternalServerError)
+        {
+            context.ProblemDetails.Extensions["code"] = "unexpectedError";
             context.ProblemDetails.Title = "Không thể xử lý yêu cầu";
             context.ProblemDetails.Detail = "Hệ thống gặp sự cố. Vui lòng thử lại sau.";
+        }
+        else
+        {
+            context.ProblemDetails.Extensions.TryAdd("code", "requestError");
+            context.ProblemDetails.Title = "Yêu cầu không hợp lệ";
+            context.ProblemDetails.Detail ??= "Vui lòng kiểm tra thông tin và thử lại.";
         }
     };
 });
@@ -29,6 +41,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseExceptionHandler();
+app.UseStatusCodePages();
 app.Use(async (context, next) =>
 {
     context.Response.OnStarting(() =>
