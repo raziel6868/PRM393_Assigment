@@ -1,9 +1,10 @@
 [CmdletBinding()]
-param()
+param([switch]$IncludeIdentity)
 
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $apiDirectory = Join-Path $repositoryRoot 'backend\src\MyFSchool.Api'
+$solutionPath = Join-Path $repositoryRoot 'backend\MyFSchool.sln'
 $apiAssembly = Join-Path $apiDirectory 'bin\Release\net10.0\MyFSchool.Api.dll'
 $runId = '{0}_{1}' -f (Get-Date -Format 'yyyyMMddHHmmss'), ([Guid]::NewGuid().ToString('N').Substring(0, 8))
 $databaseName = "MyFSchool_QA_$runId"
@@ -31,6 +32,7 @@ $failureContext = [ordered]@{
 $artifactDirectory = Join-Path $repositoryRoot "qa\artifacts\$runId"
 $retainedLogs = [System.Collections.Generic.List[string]]::new()
 $scenarioResults = [ordered]@{
+    releaseBuild = 'pending'
     invalidSqlConfiguration = 'pending'
     invalidStorageConfiguration = 'pending'
     health = 'pending'
@@ -38,8 +40,20 @@ $scenarioResults = [ordered]@{
     ready = 'pending'
     missingStorage = 'pending'
 }
+if ($IncludeIdentity) {
+    $scenarioResults.identityMigration = 'pending'
+    $scenarioResults.identityAuth = 'pending'
+    $scenarioResults.identityPersistence = 'pending'
+}
 $importedEnvironmentNames = [System.Collections.Generic.List[string]]::new()
-$managedEnvironmentNames = @('ASPNETCORE_ENVIRONMENT', 'ASPNETCORE_URLS', 'ConnectionStrings__Default', 'Storage__Provider', 'Storage__LocalRoot')
+$managedEnvironmentNames = @(
+    'ASPNETCORE_ENVIRONMENT', 'ASPNETCORE_URLS', 'ConnectionStrings__Default', 'Storage__Provider', 'Storage__LocalRoot',
+    'Auth__Issuer', 'Auth__Audience', 'Auth__JwtSigningKey', 'Auth__AccessTokenMinutes', 'Auth__RestrictedTokenMinutes',
+    'Auth__RefreshTokenDays', 'Auth__TemporaryPasswordHours', 'Bootstrap__Enabled', 'Bootstrap__AdministratorUserName',
+    'WebOrigins__AllowedOrigins__0',
+    'Bootstrap__AdministratorEmail', 'Bootstrap__AdministratorDisplayName', 'Bootstrap__AdministratorPassword',
+    'QA_ADMIN_USERNAME', 'QA_ADMIN_PASSWORD'
+)
 $previousEnvironment = @{}
 foreach ($name in $managedEnvironmentNames) {
     $previousEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
@@ -92,7 +106,7 @@ function Start-IsolatedApiProcess {
         [Parameter(Mandatory)][string]$StandardErrorPath
     )
 
-    $excludedNames = @('QA_SQLSERVER_ADMIN_CONNECTION', 'QA_GMAIL_RECIPIENT', 'Smtp__UserName', 'Smtp__Password')
+    $excludedNames = @('QA_SQLSERVER_ADMIN_CONNECTION', 'QA_GMAIL_RECIPIENT', 'QA_ADMIN_USERNAME', 'QA_ADMIN_PASSWORD', 'Smtp__UserName', 'Smtp__Password')
     $excludedValues = @{}
     foreach ($name in $excludedNames) {
         $excludedValues[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
@@ -283,11 +297,49 @@ function Stop-OwnedProcesses {
     }
 }
 
+function Assert-IdentityPersistence {
+    param([Parameter(Mandatory)][string]$ApplicationConnectionString)
+
+    $connection = [System.Data.SqlClient.SqlConnection]::new($ApplicationConnectionString)
+    try {
+        $connection.Open()
+        $command = $connection.CreateCommand()
+        try {
+            $command.CommandText = @'
+SELECT
+    (SELECT COUNT(*) FROM Users) AS UserCount,
+    (SELECT COUNT(*) FROM Roles) AS RoleCount,
+    (SELECT COUNT(*) FROM SecurityAuditEvents) AS AuditCount,
+    (SELECT COUNT(*) FROM RefreshTokens) AS RefreshCount,
+    (SELECT COUNT(*) FROM RefreshTokens WHERE LEN(TokenHash) <> 44) AS InvalidHashCount,
+    (SELECT COUNT(*) FROM Users WHERE MustChangePassword = 1 AND TemporaryPasswordExpiresAtUtc IS NOT NULL) AS RestrictedUserCount
+'@
+            $reader = $command.ExecuteReader()
+            try {
+                if (-not $reader.Read() -or
+                    $reader.GetInt32(0) -lt 2 -or
+                    $reader.GetInt32(1) -ne 4 -or
+                    $reader.GetInt32(2) -lt 4 -or
+                    $reader.GetInt32(3) -lt 3 -or
+                    $reader.GetInt32(4) -ne 0 -or
+                    $reader.GetInt32(5) -ne 2) {
+                    throw 'Identity persistence counts or token-hash invariants did not match the accepted flow.'
+                }
+            }
+            finally { $reader.Dispose() }
+        }
+        finally { $command.Dispose() }
+    }
+    finally { $connection.Dispose() }
+}
+
 function Save-FailureEvidence {
     New-Item -ItemType Directory -Path $artifactDirectory -Force | Out-Null
     $sensitiveValues = @(
         [Environment]::GetEnvironmentVariable('Smtp__Password', 'Process'),
         [Environment]::GetEnvironmentVariable('Auth__JwtSigningKey', 'Process'),
+        [Environment]::GetEnvironmentVariable('Bootstrap__AdministratorPassword', 'Process'),
+        [Environment]::GetEnvironmentVariable('QA_ADMIN_PASSWORD', 'Process'),
         [Environment]::GetEnvironmentVariable('QA_SQLSERVER_ADMIN_CONNECTION', 'Process')
     ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
 
@@ -296,24 +348,14 @@ function Save-FailureEvidence {
             $destination = Join-Path $artifactDirectory $logFile.Name
             $redactedLines = Get-Content -LiteralPath $logFile.FullName -Tail 200 | ForEach-Object {
                 $line = [string]$_
-                $containsKnownSecret = $false
                 foreach ($value in $sensitiveValues) {
-                    if ($line.Contains($value, [System.StringComparison]::Ordinal)) {
-                        $containsKnownSecret = $true
-                        break
-                    }
+                    $line = $line.Replace($value, '<REDACTED>', [System.StringComparison]::Ordinal)
                 }
-
-                if ($containsKnownSecret -or
-                    $line -match '(?i)(password|pwd|token|secret|authorization|credential|api[-_]?key|user\s*id|uid|smtp__|connection\s*string|server\s*=|initial\s+catalog\s*=)') {
-                    '[REDACTED SENSITIVE LOG LINE]'
-                }
-                else {
-                    $line = $line.Replace($repositoryRoot, '<REPOSITORY>', [System.StringComparison]::OrdinalIgnoreCase)
-                    $line = $line.Replace($temporaryRoot, '<TEMP>', [System.StringComparison]::OrdinalIgnoreCase)
-                    $line = $line -replace '(?i)(Bearer\s+)[A-Za-z0-9._-]+', '$1REDACTED'
-                    $line -replace '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}', 'REDACTED_EMAIL'
-                }
+                $line = $line.Replace($repositoryRoot, '<REPOSITORY>', [System.StringComparison]::OrdinalIgnoreCase)
+                $line = $line.Replace($temporaryRoot, '<TEMP>', [System.StringComparison]::OrdinalIgnoreCase)
+                $line = $line -replace '(?i)(Bearer\s+)[A-Za-z0-9._-]+', '$1REDACTED'
+                $line = $line -replace '(?i)((?:password|pwd|token|secret|authorization|credential|api[-_]?key)\s*[:=]\s*)[^\s,;]+', '$1REDACTED'
+                $line -replace '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}', 'REDACTED_EMAIL'
             }
             Set-Content -LiteralPath $destination -Value $redactedLines
             $retainedLogs.Add($logFile.Name)
@@ -342,6 +384,21 @@ function Write-ResultManifest {
         (Get-FileHash -LiteralPath $apiAssembly -Algorithm SHA256).Hash
     }
     else { $null }
+    $inputFiles = @(
+        Get-ChildItem -LiteralPath (Join-Path $repositoryRoot 'backend\src') -Recurse -File |
+            Where-Object { $_.Extension -in @('.cs', '.csproj', '.json') }
+        Get-ChildItem -LiteralPath (Join-Path $repositoryRoot 'qa\api') -Recurse -File |
+            Where-Object { $_.FullName -notmatch '[\\/]node_modules[\\/]' }
+        Get-Item -LiteralPath (Join-Path $repositoryRoot 'qa\scripts\run-backend-core.ps1')
+        Get-Item -LiteralPath (Join-Path $repositoryRoot 'qa\scripts\run-smoke.ps1')
+    ) | Sort-Object FullName -Unique
+    $inputIdentity = $inputFiles | ForEach-Object {
+        $relativePath = [System.IO.Path]::GetRelativePath($repositoryRoot, $_.FullName)
+        "$relativePath`:$((Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash)"
+    }
+    $inputSha256 = [Convert]::ToHexString(
+        [System.Security.Cryptography.SHA256]::HashData(
+            [System.Text.Encoding]::UTF8.GetBytes(($inputIdentity -join "`n"))))
     $failure = if ($runFailure) {
         $exceptionType = $runFailure.Exception.GetType().Name
         $fingerprint = @(
@@ -391,6 +448,7 @@ function Write-ResultManifest {
         artifact = [ordered]@{
             gitHead = [string]$gitHead
             apiSha256 = $apiSha256
+            sourceAndQaInputSha256 = $inputSha256
             dotnetSdk = [string]$dotnetSdk
             nodeVersion = [string]$nodeVersion
         }
@@ -413,17 +471,41 @@ function Write-ResultManifest {
 }
 
 try {
+    $currentPhase = 'release-build'
+    $failureContext.command = 'dotnet build backend/MyFSchool.sln -c Release --no-restore'
+    $failureContext.scenario = 'release-build'
+    $failureContext.exitCodeOrTimeout = 'not-applicable'
+    $failureContext.stableError = 'release-build-failed'
+    $failureContext.routeOrStep = 'compile current source before QA'
+    & dotnet build $solutionPath --configuration Release --no-restore
+    if ($LASTEXITCODE -ne 0) {
+        $failureContext.exitCodeOrTimeout = "exit-code:$LASTEXITCODE"
+        throw 'Release build failed.'
+    }
+    if (-not (Test-Path -LiteralPath $apiAssembly -PathType Leaf)) {
+        throw "Release build did not produce the API artifact: $apiAssembly"
+    }
+    $scenarioResults.releaseBuild = 'passed'
+
     $currentPhase = 'configuration'
     $failureContext.command = 'Import-RootEnvironment'
     $failureContext.scenario = 'configuration'
     $failureContext.exitCodeOrTimeout = 'not-applicable'
     $failureContext.stableError = 'configuration-invalid'
     $failureContext.routeOrStep = 'repository-root-env'
-    if (-not (Test-Path -LiteralPath $apiAssembly -PathType Leaf)) { throw "Missing Release API artifact: $apiAssembly" }
     Import-RootEnvironment -RepositoryRoot $repositoryRoot -ImportedNames $importedEnvironmentNames
     if ([string]::IsNullOrWhiteSpace($env:QA_SQLSERVER_ADMIN_CONNECTION)) {
         throw 'Missing required setting: QA_SQLSERVER_ADMIN_CONNECTION'
     }
+    $env:Auth__Issuer = 'MyFSchool.QA'
+    $env:Auth__Audience = 'MyFSchool.QA.Clients'
+    $env:Auth__JwtSigningKey = [Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+    $env:Auth__AccessTokenMinutes = '15'
+    $env:Auth__RestrictedTokenMinutes = '5'
+    $env:Auth__RefreshTokenDays = '7'
+    $env:Auth__TemporaryPasswordHours = '24'
+    $env:WebOrigins__AllowedOrigins__0 = 'http://localhost:5173'
+    $env:Bootstrap__Enabled = 'false'
 
     Assert-SafeRunIdentity
     $runIdentityValidated = $true
@@ -457,8 +539,36 @@ try {
     $applicationBuilder['Initial Catalog'] = $databaseName
     $applicationConnectionString = $applicationBuilder.ConnectionString
 
+    if ($IncludeIdentity) {
+        $currentPhase = 'identity-migration'
+        $failureContext.command = 'dotnet ef database update'
+        $failureContext.scenario = 'identity-migration'
+        $failureContext.exitCodeOrTimeout = 'not-applicable'
+        $failureContext.stableError = 'identity-migration-failed'
+        $failureContext.routeOrStep = 'apply current migration to fresh database'
+        $env:ConnectionStrings__Default = $applicationConnectionString
+        & dotnet ef database update `
+            --project (Join-Path $repositoryRoot 'backend\src\MyFSchool.Infrastructure') `
+            --startup-project (Join-Path $repositoryRoot 'backend\src\MyFSchool.Api') `
+            --configuration Release --no-build
+        if ($LASTEXITCODE -ne 0) {
+            $failureContext.exitCodeOrTimeout = "exit-code:$LASTEXITCODE"
+            throw 'Identity migration failed.'
+        }
+        $scenarioResults.identityMigration = 'passed'
+    }
+
     $currentPhase = 'invalid-configuration'
     Assert-InvalidConfigurationFailsFast -ApplicationConnectionString $applicationConnectionString
+    if ($IncludeIdentity) {
+        $env:Bootstrap__Enabled = 'true'
+        $env:Bootstrap__AdministratorUserName = "qa-admin-$runId"
+        $env:Bootstrap__AdministratorEmail = "qa-admin-$runId@example.invalid"
+        $env:Bootstrap__AdministratorDisplayName = 'Quản trị viên QA'
+        $env:Bootstrap__AdministratorPassword = "Qa!A7-$([Guid]::NewGuid().ToString('N'))"
+        $env:QA_ADMIN_USERNAME = $env:Bootstrap__AdministratorUserName
+        $env:QA_ADMIN_PASSWORD = $env:Bootstrap__AdministratorPassword
+    }
     $currentPhase = 'health'
     $failureContext.command = 'dotnet MyFSchool.Api.dll'
     $failureContext.scenario = 'health'
@@ -481,6 +591,25 @@ try {
     $failureContext.routeOrStep = 'security headers, OpenAPI, ProblemDetails'
     & (Join-Path $PSScriptRoot 'run-smoke.ps1') -ApiOrigin 'http://127.0.0.1:5080' -Scenario 'core-contract' -ThrowOnFailure
     $scenarioResults.apiContract = 'passed'
+
+    if ($IncludeIdentity) {
+        $currentPhase = 'identity-auth'
+        $failureContext.command = 'npm run identity-auth'
+        $failureContext.scenario = 'identity-auth'
+        $failureContext.exitCodeOrTimeout = 'not-applicable'
+        $failureContext.stableError = 'identity-auth-contract-failed'
+        $failureContext.routeOrStep = 'sign-in, session, provision, refresh rotation/reuse, logout'
+        & (Join-Path $PSScriptRoot 'run-smoke.ps1') -ApiOrigin 'http://127.0.0.1:5080' -Scenario 'identity-auth' -ThrowOnFailure
+        $scenarioResults.identityAuth = 'passed'
+        $currentPhase = 'identity-persistence'
+        $failureContext.command = 'Assert-IdentityPersistence'
+        $failureContext.scenario = 'identity-persistence'
+        $failureContext.exitCodeOrTimeout = 'not-applicable'
+        $failureContext.stableError = 'identity-persistence-invalid'
+        $failureContext.routeOrStep = 'users, roles, audits, hashed refresh tokens, restricted user'
+        Assert-IdentityPersistence -ApplicationConnectionString $applicationConnectionString
+        $scenarioResults.identityPersistence = 'passed'
+    }
 
     $currentPhase = 'ready'
     $failureContext.command = 'Invoke-WebRequest'

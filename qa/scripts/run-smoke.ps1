@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$ApiOrigin = 'http://127.0.0.1:5080',
-    [ValidateSet('smoke', 'core-contract')]
+    [ValidateSet('smoke', 'core-contract', 'identity-auth')]
     [string]$Scenario = 'smoke',
     [switch]$ThrowOnFailure
 )

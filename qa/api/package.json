@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "smoke": "node tests/health.mjs",
-    "core-contract": "node tests/core-contract.mjs"
+    "core-contract": "node tests/core-contract.mjs",
+    "identity-auth": "node tests/identity-auth.mjs"
   }
 }
