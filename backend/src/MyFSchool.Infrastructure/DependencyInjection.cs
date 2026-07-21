@@ -1,9 +1,13 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
 using MyFSchool.Application.Readiness;
 using MyFSchool.Infrastructure.Configuration;
 using MyFSchool.Infrastructure.Readiness;
+using MyFSchool.Infrastructure.Identity;
+using MyFSchool.Infrastructure.Persistence;
 
 namespace MyFSchool.Infrastructure;
 
@@ -15,12 +19,13 @@ public static class DependencyInjection
         string applicationContentRoot)
     {
         var repositoryRoot = ResolveRepositoryRoot(applicationContentRoot);
+        var connectionString = configuration.GetConnectionString("Default") ?? string.Empty;
 
         services
             .AddOptions<DatabaseOptions>()
             .Configure(options =>
             {
-                options.ConnectionString = configuration.GetConnectionString("Default") ?? string.Empty;
+                options.ConnectionString = connectionString;
             })
             .Validate(
                 options => !string.IsNullOrWhiteSpace(options.ConnectionString),
@@ -29,6 +34,23 @@ public static class DependencyInjection
                 options => IsValidSqlServerConnectionString(options.ConnectionString),
                 "ConnectionStrings__Default must be a valid SQL Server connection string")
             .ValidateOnStart();
+
+        services.AddDbContext<MyFSchoolDbContext>(options => options.UseSqlServer(connectionString));
+        services
+            .AddIdentityCore<AppUser>(options =>
+            {
+                options.Password.RequiredLength = 12;
+                options.Password.RequireDigit = true;
+                options.Password.RequireLowercase = true;
+                options.Password.RequireUppercase = true;
+                options.Password.RequireNonAlphanumeric = true;
+                options.User.RequireUniqueEmail = true;
+                options.Lockout.MaxFailedAccessAttempts = 5;
+                options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+            })
+            .AddRoles<AppRole>()
+            .AddEntityFrameworkStores<MyFSchoolDbContext>()
+            .AddDefaultTokenProviders();
 
         services
             .AddOptions<StorageOptions>()
