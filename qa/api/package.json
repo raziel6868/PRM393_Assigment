@@ -1,0 +1,8 @@
+{
+  "name": "myfschool-api-qa",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "smoke": "node tests/health.mjs"
+  }
+}
