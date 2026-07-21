@@ -1,0 +1,9 @@
+@MyFSchool.Api_HostAddress = http://localhost:5080
+
+GET {{MyFSchool.Api_HostAddress}}/health
+Accept: application/json
+
+###
+
+GET {{MyFSchool.Api_HostAddress}}/ready
+Accept: application/json
