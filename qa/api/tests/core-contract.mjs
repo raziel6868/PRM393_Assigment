@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
+import { request } from 'node:http';
 
 const apiOrigin = process.env.QA_API_ORIGIN ?? 'http://127.0.0.1:5080';
 
-async function get(path) {
+async function get(path, options = {}) {
   try {
     return await fetch(`${apiOrigin}${path}`, {
+      ...options,
       signal: AbortSignal.timeout(5_000),
     });
   } catch (error) {
@@ -15,6 +17,48 @@ async function get(path) {
     throw new Error(`GET ${path} failed before receiving an HTTP response.`);
   }
 }
+
+function getWithHost(path, host) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let response;
+    let deadline;
+    const rejectOnce = (message) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      reject(new Error(message));
+    };
+    const resolveOnce = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      resolve(value);
+    };
+    const req = request(new URL(path, apiOrigin), { headers: { host } }, (incomingResponse) => {
+      response = incomingResponse;
+      response.once('aborted', () => rejectOnce(`GET ${path} response ended unexpectedly.`));
+      response.once('error', () => rejectOnce(`GET ${path} response ended unexpectedly.`));
+      response.resume();
+      response.once('end', () => resolveOnce(response));
+    });
+    req.once('error', () => rejectOnce(`GET ${path} failed before receiving an HTTP response.`));
+    deadline = setTimeout(() => {
+      const deadlineMessage = `GET ${path} did not complete within the 5-second deadline.`;
+      rejectOnce(deadlineMessage);
+      response?.destroy();
+      req.destroy();
+    }, 5_000);
+    req.end();
+  });
+}
+
+const emulatorHealthResponse = await getWithHost('/health', '10.0.2.2');
+assert.equal(
+  emulatorHealthResponse.statusCode,
+  200,
+  'Android emulator Host header must reach the shared Backend',
+);
 
 const healthResponse = await get('/health');
 for (const [name, expected] of Object.entries({
