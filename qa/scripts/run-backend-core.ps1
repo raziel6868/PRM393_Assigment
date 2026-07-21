@@ -31,8 +31,10 @@ $failureContext = [ordered]@{
 $artifactDirectory = Join-Path $repositoryRoot "qa\artifacts\$runId"
 $retainedLogs = [System.Collections.Generic.List[string]]::new()
 $scenarioResults = [ordered]@{
-    invalidConfiguration = 'pending'
+    invalidSqlConfiguration = 'pending'
+    invalidStorageConfiguration = 'pending'
     health = 'pending'
+    apiContract = 'pending'
     ready = 'pending'
     missingStorage = 'pending'
 }
@@ -176,6 +178,8 @@ function Test-TimeoutFailure {
 }
 
 function Assert-InvalidConfigurationFailsFast {
+    param([Parameter(Mandatory)][string]$ApplicationConnectionString)
+
     $invalidConnections = @(
         'Encrypt=True',
         'Server=localhost;Database=master;Authentication=Sql Password;Encrypt=True',
@@ -218,6 +222,47 @@ function Assert-InvalidConfigurationFailsFast {
             throw 'Invalid SQL configuration did not fail with the setting-named validation message.'
         }
     }
+    $scenarioResults.invalidSqlConfiguration = 'passed'
+
+    $invalidStorageCases = @(
+        [ordered]@{ Provider = 'Cloud'; LocalRoot = $storageRoot; Expected = 'Storage__Provider must be Local'; Code = 'provider-not-local' },
+        [ordered]@{ Provider = 'Local'; LocalRoot = 'relative-storage'; Expected = 'Storage__LocalRoot must be an absolute path'; Code = 'path-not-absolute' },
+        [ordered]@{ Provider = 'Local'; LocalRoot = (Join-Path $repositoryRoot 'qa-storage'); Expected = 'Storage__LocalRoot must be outside the repository'; Code = 'path-inside-repository' }
+    )
+
+    for ($index = 0; $index -lt $invalidStorageCases.Count; $index++) {
+        $case = $invalidStorageCases[$index]
+        $failureContext.command = 'dotnet MyFSchool.Api.dll'
+        $failureContext.scenario = 'invalid-storage-configuration'
+        $failureContext.exitCodeOrTimeout = 'pending'
+        $failureContext.stableError = $case.Code
+        $failureContext.routeOrStep = "case:$index"
+        $env:ASPNETCORE_URLS = 'http://127.0.0.1:5082'
+        $env:ConnectionStrings__Default = $ApplicationConnectionString
+        $env:Storage__Provider = $case.Provider
+        $env:Storage__LocalRoot = $case.LocalRoot
+        $stdoutPath = Join-Path $runRoot "invalid-storage-$index.stdout.log"
+        $stderrPath = Join-Path $runRoot "invalid-storage-$index.stderr.log"
+        $process = Start-IsolatedApiProcess `
+            -StandardOutputPath $stdoutPath `
+            -StandardErrorPath $stderrPath
+
+        $ownedProcesses.Add([pscustomobject]@{ Process = $process; StartTime = $process.StartTime })
+        if (-not $process.WaitForExit(10000)) {
+            $failureContext.exitCodeOrTimeout = 'timeout:10s'
+            throw 'Invalid storage configuration did not fail before the 10-second deadline.'
+        }
+
+        $failureContext.exitCodeOrTimeout = "exit-code:$($process.ExitCode)"
+        if ($process.ExitCode -eq 0) { throw 'Invalid storage configuration unexpectedly started the API.' }
+        $combinedOutput = (Get-Content -Raw $stdoutPath) + (Get-Content -Raw $stderrPath)
+        if (-not $combinedOutput.Contains($case.Expected)) {
+            $failureContext.stableError = 'storage-validation-message-missing'
+            $failureContext.routeOrStep = "case:${index}:startup-output"
+            throw 'Invalid storage configuration did not fail with the setting-named validation message.'
+        }
+    }
+    $scenarioResults.invalidStorageConfiguration = 'passed'
 }
 
 function Stop-OwnedProcesses {
@@ -413,8 +458,7 @@ try {
     $applicationConnectionString = $applicationBuilder.ConnectionString
 
     $currentPhase = 'invalid-configuration'
-    Assert-InvalidConfigurationFailsFast
-    $scenarioResults.invalidConfiguration = 'passed'
+    Assert-InvalidConfigurationFailsFast -ApplicationConnectionString $applicationConnectionString
     $currentPhase = 'health'
     $failureContext.command = 'dotnet MyFSchool.Api.dll'
     $failureContext.scenario = 'health'
@@ -428,6 +472,15 @@ try {
     $failureContext.routeOrStep = 'GET /health'
     & (Join-Path $PSScriptRoot 'run-smoke.ps1') -ApiOrigin 'http://127.0.0.1:5080' -ThrowOnFailure
     $scenarioResults.health = 'passed'
+
+    $currentPhase = 'api-contract'
+    $failureContext.command = 'npm run core-contract'
+    $failureContext.scenario = 'api-contract'
+    $failureContext.exitCodeOrTimeout = 'not-applicable'
+    $failureContext.stableError = 'api-contract-failed'
+    $failureContext.routeOrStep = 'security headers, OpenAPI, ProblemDetails'
+    & (Join-Path $PSScriptRoot 'run-smoke.ps1') -ApiOrigin 'http://127.0.0.1:5080' -Scenario 'core-contract' -ThrowOnFailure
+    $scenarioResults.apiContract = 'passed'
 
     $currentPhase = 'ready'
     $failureContext.command = 'Invoke-WebRequest'

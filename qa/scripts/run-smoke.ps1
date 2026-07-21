@@ -1,6 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$ApiOrigin = 'http://127.0.0.1:5080',
+    [ValidateSet('smoke', 'core-contract')]
+    [string]$Scenario = 'smoke',
     [switch]$ThrowOnFailure
 )
 
@@ -15,7 +17,7 @@ try {
     $env:QA_API_ORIGIN = $ApiOrigin
     Push-Location (Join-Path $PSScriptRoot '..\api')
     try {
-        npm run smoke
+        npm run $Scenario
         if ($LASTEXITCODE -ne 0) {
             $failureExitCode = $LASTEXITCODE
             if ($ThrowOnFailure) {

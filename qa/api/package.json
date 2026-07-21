@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "smoke": "node tests/health.mjs"
+    "smoke": "node tests/health.mjs",
+    "core-contract": "node tests/core-contract.mjs"
   }
 }
