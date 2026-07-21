@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.DataProtection;
 using MyFSchool.Application.Readiness;
 using MyFSchool.Infrastructure.Configuration;
 using MyFSchool.Infrastructure.Readiness;
@@ -36,6 +37,7 @@ public static class DependencyInjection
             .ValidateOnStart();
 
         services.AddDbContext<MyFSchoolDbContext>(options => options.UseSqlServer(connectionString));
+        services.AddDataProtection();
         services
             .AddIdentityCore<AppUser>(options =>
             {
