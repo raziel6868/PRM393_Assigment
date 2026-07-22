@@ -89,6 +89,7 @@ public static class DependencyInjection
         services.AddScoped<ISchoolReferenceAdministrationService, SchoolReferenceAdministrationService>();
         services.AddScoped<ISchoolScopeQueryService, SchoolScopeQueryService>();
         services.AddScoped<IAttendanceAdministrationService, AttendanceAdministrationService>();
+        services.AddScoped<ILeaveRequestAdministrationService, LeaveRequestAdministrationService>();
 
         services
             .AddOptions<StorageOptions>()

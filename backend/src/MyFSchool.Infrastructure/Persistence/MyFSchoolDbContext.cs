@@ -35,6 +35,8 @@ public sealed class MyFSchoolDbContext(DbContextOptions<MyFSchoolDbContext> opti
 
     public DbSet<AttendanceRecord> AttendanceRecords => Set<AttendanceRecord>();
 
+    public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -196,6 +198,27 @@ public sealed class MyFSchoolDbContext(DbContextOptions<MyFSchoolDbContext> opti
             entity.HasIndex(item => new { item.ClassId, item.AttendanceDate, item.Session });
             entity.HasOne<StudentProfile>().WithMany().HasForeignKey(item => item.StudentProfileId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<ClassRoom>().WithMany().HasForeignKey(item => item.ClassId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<LeaveRequest>(entity =>
+        {
+            entity.ToTable("LeaveRequests");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.StartDate).HasConversion(
+                value => value.ToDateTime(TimeOnly.MinValue),
+                value => DateOnly.FromDateTime(value));
+            entity.Property(item => item.EndDate).HasConversion(
+                value => value.ToDateTime(TimeOnly.MinValue),
+                value => DateOnly.FromDateTime(value));
+            entity.Property(item => item.Reason).HasMaxLength(500).IsRequired();
+            entity.Property(item => item.DecisionNote).HasMaxLength(500);
+            entity.Property(item => item.CreatedAtUtc).HasPrecision(0);
+            entity.Property(item => item.ReviewedAtUtc).HasPrecision(0);
+            entity.Property(item => item.DecidedAtUtc).HasPrecision(0);
+            entity.Property(item => item.RowVersion).IsRowVersion();
+            entity.HasIndex(item => new { item.StudentProfileId, item.Status });
+            entity.HasIndex(item => new { item.Status, item.CreatedAtUtc });
+            entity.HasOne<StudentProfile>().WithMany().HasForeignKey(item => item.StudentProfileId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 

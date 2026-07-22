@@ -9,6 +9,7 @@
     "password-assistance": "node tests/password-assistance.mjs",
     "identity-relationships": "node tests/identity-relationships.mjs",
     "school-reference": "node tests/school-reference.mjs",
-    "attendance": "node tests/attendance.mjs"
+    "attendance": "node tests/attendance.mjs",
+    "leave-requests": "node tests/leave-requests.mjs"
   }
 }

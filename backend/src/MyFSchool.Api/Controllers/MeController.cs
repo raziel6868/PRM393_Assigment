@@ -9,10 +9,12 @@ namespace MyFSchool.Api.Controllers;
 
 [ApiController]
 [Authorize(Policy = SchoolPolicies.AuthenticatedSession)]
-[Route("api/v1/me")]
-public sealed class MeController(ISchoolScopeQueryService scopeService) : ControllerBase
+[Route("api/v1")]
+public sealed class MeController(
+    ISchoolScopeQueryService scopeService,
+    ILeaveRequestAdministrationService leaveService) : ControllerBase
 {
-    [HttpGet("classes")]
+    [HttpGet("me/classes")]
     public async Task<IActionResult> GetClasses(CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -44,6 +46,29 @@ public sealed class MeController(ISchoolScopeQueryService scopeService) : Contro
         return Ok(Array.Empty<object>());
     }
 
+    [HttpGet("students/me/leave-requests")]
+    public async Task<IActionResult> ListOwnLeaveRequests(
+        [FromQuery] int page,
+        [FromQuery] int pageSize,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        var result = await leaveService.ListMineAsync(userId, null, page, pageSize, cancellationToken);
+        if (!result.IsSuccess) return ProblemResponse(400, result.ErrorCode!, "Không thể tải đơn", "Vui lòng thử lại.");
+        var pageResult = result.Value!;
+        return Ok(new LeaveRequestPageResponse(
+            pageResult.Items.Select(LeaveResponseMapping.Map).ToList(),
+            pageResult.Page, pageResult.PageSize, pageResult.TotalCount, pageResult.TotalPages));
+    }
+
     private bool TryGetUserId(out Guid userId) =>
         Guid.TryParse(User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value, out userId);
+
+    private ObjectResult ProblemResponse(int status, string code, string title, string detail)
+    {
+        var problem = new ProblemDetails { Status = status, Title = title, Detail = detail };
+        problem.Extensions["code"] = code;
+        problem.Extensions["traceId"] = HttpContext.TraceIdentifier;
+        return StatusCode(status, problem);
+    }
 }

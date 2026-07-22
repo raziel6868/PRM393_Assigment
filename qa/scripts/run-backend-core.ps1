@@ -53,6 +53,7 @@ if ($IncludeIdentity) {
 if ($IncludeSchoolReference) {
     $scenarioResults.schoolReference = 'pending'
     $scenarioResults.attendance = 'pending'
+    $scenarioResults.leaveRequests = 'pending'
 }
 $importedEnvironmentNames = [System.Collections.Generic.List[string]]::new()
 $managedEnvironmentNames = @(
@@ -529,7 +530,10 @@ try {
     }
     $env:Auth__Issuer = 'MyFSchool.QA'
     $env:Auth__Audience = 'MyFSchool.QA.Clients'
-    $env:Auth__JwtSigningKey = [Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $bytes = New-Object byte[] 48
+    $rng.GetBytes($bytes)
+    $env:Auth__JwtSigningKey = [Convert]::ToBase64String($bytes)
     $env:Auth__AccessTokenMinutes = '15'
     $env:Auth__RestrictedTokenMinutes = '5'
     $env:Auth__RefreshTokenDays = '7'
@@ -675,6 +679,14 @@ try {
         $failureContext.routeOrStep = 'teacher roster, save, concurrency, student/parent history'
         & (Join-Path $PSScriptRoot 'run-smoke.ps1') -ApiOrigin 'http://127.0.0.1:5082' -Scenario 'attendance' -ThrowOnFailure
         $scenarioResults.attendance = 'passed'
+        $currentPhase = 'leave-requests'
+        $failureContext.command = 'npm run leave-requests'
+        $failureContext.scenario = 'leave-requests'
+        $failureContext.exitCodeOrTimeout = 'not-applicable'
+        $failureContext.stableError = 'leave-requests-contract-failed'
+        $failureContext.routeOrStep = 'parent submit/cancel, teacher queue/approve/reject, dedup, concurrency'
+        & (Join-Path $PSScriptRoot 'run-smoke.ps1') -ApiOrigin 'http://127.0.0.1:5082' -Scenario 'leave-requests' -ThrowOnFailure
+        $scenarioResults.leaveRequests = 'passed'
     }
 
     $currentPhase = 'ready'
