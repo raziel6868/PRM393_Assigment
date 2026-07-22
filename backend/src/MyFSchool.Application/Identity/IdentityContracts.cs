@@ -40,7 +40,14 @@ public sealed record AccessTokenDescriptor(
     string DisplayName,
     IReadOnlyList<string> Roles,
     bool PasswordChangeRequired,
+    string SecurityStamp,
     TimeSpan Lifetime);
+
+public sealed record ChangeTemporaryPasswordCommand(
+    Guid UserId,
+    string CurrentPassword,
+    string NewPassword,
+    string CorrelationId);
 
 public sealed record AccessToken(string Value, DateTimeOffset ExpiresAtUtc);
 
@@ -60,6 +67,55 @@ public sealed record ProvisionedUser(
     IReadOnlyList<string> Roles,
     string TemporaryPassword,
     DateTimeOffset TemporaryPasswordExpiresAtUtc);
+
+public sealed record PasswordHelpQuery(
+    PasswordHelpStatusFilter Status,
+    int Page,
+    int PageSize);
+
+public enum PasswordHelpStatusFilter
+{
+    Pending,
+    Resolved,
+    Rejected
+}
+
+public sealed record PasswordHelpItem(
+    Guid RequestId,
+    Guid UserId,
+    string DisplayName,
+    string UserName,
+    string? Email,
+    PasswordHelpStatusFilter Status,
+    DateTimeOffset RequestedAtUtc,
+    DateTimeOffset? ResolvedAtUtc,
+    string RowVersion);
+
+public sealed record PasswordHelpPage(
+    IReadOnlyList<PasswordHelpItem> Items,
+    int Page,
+    int PageSize,
+    int TotalCount,
+    int TotalPages);
+
+public sealed record IssueTemporaryPasswordCommand(
+    Guid UserId,
+    bool Confirmed,
+    byte[] RequestRowVersion,
+    Guid ActorUserId,
+    string CorrelationId);
+
+public sealed record IssuedTemporaryPassword(
+    Guid UserId,
+    string TemporaryPassword,
+    DateTimeOffset ExpiresAtUtc);
+
+public sealed record RejectPasswordHelpCommand(
+    Guid RequestId,
+    bool Confirmed,
+    byte[] RequestRowVersion,
+    Guid ActorUserId,
+    string CorrelationId);
 
 public sealed record OperationResult<T>(T? Value, string? ErrorCode)
 {

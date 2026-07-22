@@ -65,6 +65,49 @@ public sealed class AdminUsersController(IAccountAdministrationService accountAd
             user.TemporaryPasswordExpiresAtUtc));
     }
 
+    [HttpPost("{userId:guid}/issue-temporary-password")]
+    public async Task<IActionResult> IssueTemporaryPassword(
+        Guid userId,
+        IssueTemporaryPasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!request.Confirmed)
+        {
+            return ValidationProblemResponse("confirmed", "Vui lòng xác nhận cấp mật khẩu tạm.");
+        }
+        if (!Guid.TryParse(User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value, out var actorUserId))
+        {
+            return Unauthorized();
+        }
+        if (!TryParseRowVersion(request.RowVersion, out var rowVersion))
+        {
+            return ValidationProblemResponse("rowVersion", "Phiên bản yêu cầu hỗ trợ không hợp lệ.");
+        }
+
+        var result = await accountAdministrationService.IssueTemporaryPasswordAsync(
+            new IssueTemporaryPasswordCommand(
+                userId,
+                request.Confirmed,
+                rowVersion,
+                actorUserId,
+                HttpContext.TraceIdentifier),
+            cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return result.ErrorCode == "accountNotFound"
+                ? ProblemResponse(404, "notFound", "Không tìm thấy tài khoản", "Tài khoản không tồn tại hoặc không còn hoạt động.")
+                : ProblemResponse(409, "passwordHelpRequestNotPending", "Yêu cầu đã thay đổi", "Yêu cầu hỗ trợ không còn ở trạng thái chờ xử lý.");
+        }
+
+        var issued = result.Value!;
+        Response.Headers.CacheControl = "no-store";
+        Response.Headers.Pragma = "no-cache";
+        return Ok(new IssueTemporaryPasswordResponse(
+            issued.UserId,
+            issued.TemporaryPassword,
+            issued.ExpiresAtUtc));
+    }
+
     private BadRequestObjectResult ValidationProblemResponse(string field, string message)
     {
         var problem = new ValidationProblemDetails(new Dictionary<string, string[]>
@@ -79,5 +122,27 @@ public sealed class AdminUsersController(IAccountAdministrationService accountAd
         problem.Extensions["code"] = "validationFailed";
         problem.Extensions["traceId"] = HttpContext.TraceIdentifier;
         return BadRequest(problem);
+    }
+
+    private ObjectResult ProblemResponse(int status, string code, string title, string detail)
+    {
+        var problem = new ProblemDetails { Status = status, Title = title, Detail = detail };
+        problem.Extensions["code"] = code;
+        problem.Extensions["traceId"] = HttpContext.TraceIdentifier;
+        return StatusCode(status, problem);
+    }
+
+    private static bool TryParseRowVersion(string value, out byte[] rowVersion)
+    {
+        try
+        {
+            rowVersion = Convert.FromBase64String(value);
+            return rowVersion.Length > 0;
+        }
+        catch (FormatException)
+        {
+            rowVersion = [];
+            return false;
+        }
     }
 }

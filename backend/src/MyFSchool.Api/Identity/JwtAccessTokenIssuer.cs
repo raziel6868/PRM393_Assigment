@@ -21,7 +21,8 @@ public sealed class JwtAccessTokenIssuer(IOptions<AuthOptions> authOptions, Time
             new(JwtRegisteredClaimNames.Sub, descriptor.UserId.ToString()),
             new(JwtRegisteredClaimNames.UniqueName, descriptor.DisplayName),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new("passwordChangeRequired", descriptor.PasswordChangeRequired ? "true" : "false")
+            new("passwordChangeRequired", descriptor.PasswordChangeRequired ? "true" : "false"),
+            new(SessionVersion.ClaimName, SessionVersion.Create(descriptor.SecurityStamp))
         };
         claims.AddRange(descriptor.Roles.Select(role => new Claim(ClaimTypes.Role, SchoolRoles.ToWire(role))));
 

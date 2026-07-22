@@ -13,6 +13,7 @@ namespace MyFSchool.Api.Controllers;
 [Route("api/v1/auth")]
 public sealed class AuthController(
     IAuthService authService,
+    IPasswordHelpService passwordHelpService,
     IOptions<WebOriginOptions> webOriginOptions) : ControllerBase
 {
     private const string RefreshCookieName = "myfschool.refresh";
@@ -102,6 +103,73 @@ public sealed class AuthController(
                 new LogoutCommand(refreshToken, HttpContext.TraceIdentifier),
                 cancellationToken);
         }
+        ClearRefreshCookie();
+        return NoContent();
+    }
+
+    [AllowAnonymous]
+    [EnableRateLimiting("password-help")]
+    [HttpPost("password-help-requests")]
+    public async Task<IActionResult> SubmitPasswordHelp(
+        PasswordHelpSubmissionRequest request,
+        CancellationToken cancellationToken)
+    {
+        await passwordHelpService.SubmitAsync(
+            request.EmailOrUserName,
+            HttpContext.TraceIdentifier,
+            cancellationToken);
+        return Accepted(new PasswordHelpAcceptedResponse(
+            "Nếu thông tin phù hợp, nhà trường sẽ liên hệ để hỗ trợ bạn."));
+    }
+
+    [Authorize(Policy = SchoolPolicies.AuthenticatedSession)]
+    [HttpPost("change-temporary-password")]
+    public async Task<IActionResult> ChangeTemporaryPassword(
+        ChangeTemporaryPasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!string.Equals(request.NewPassword, request.Confirmation, StringComparison.Ordinal))
+        {
+            return ApiValidationProblem("confirmation", "Mật khẩu xác nhận không khớp.");
+        }
+        if (!Guid.TryParse(User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value, out var userId))
+        {
+            return ApiProblem(401, "unauthorized", "Chưa đăng nhập", "Vui lòng đăng nhập để tiếp tục.");
+        }
+
+        var result = await authService.ChangeTemporaryPasswordAsync(new ChangeTemporaryPasswordCommand(
+            userId,
+            request.CurrentPassword,
+            request.NewPassword,
+            HttpContext.TraceIdentifier), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return result.ErrorCode switch
+            {
+                "invalidCurrentPassword" => ApiProblem(
+                    400,
+                    "invalidCurrentPassword",
+                    "Mật khẩu hiện tại không đúng",
+                    "Vui lòng kiểm tra mật khẩu tạm và thử lại."),
+                "passwordValidationFailed" => ApiValidationProblem(
+                    "newPassword",
+                    "Mật khẩu mới chưa đáp ứng yêu cầu bảo mật."),
+                "newPasswordMustDiffer" => ApiValidationProblem(
+                    "newPassword",
+                    "Mật khẩu mới phải khác mật khẩu tạm hiện tại."),
+                "temporaryPasswordExpired" => ApiProblem(
+                    401,
+                    "temporaryPasswordExpired",
+                    "Mật khẩu tạm đã hết hạn",
+                    "Vui lòng liên hệ nhà trường để được hỗ trợ."),
+                _ => ApiProblem(
+                    409,
+                    "temporaryPasswordChangeNotRequired",
+                    "Không thể đổi mật khẩu tạm",
+                    "Tài khoản không ở trạng thái yêu cầu đổi mật khẩu tạm.")
+            };
+        }
+
         ClearRefreshCookie();
         return NoContent();
     }

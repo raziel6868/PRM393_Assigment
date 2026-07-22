@@ -71,7 +71,7 @@ public static class DependencyInjection
                 options.Password.RequireLowercase = true;
                 options.Password.RequireUppercase = true;
                 options.Password.RequireNonAlphanumeric = true;
-                options.User.RequireUniqueEmail = true;
+                options.User.RequireUniqueEmail = false;
                 options.Lockout.MaxFailedAccessAttempts = 5;
                 options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
             })
@@ -79,6 +79,7 @@ public static class DependencyInjection
             .AddEntityFrameworkStores<MyFSchoolDbContext>()
             .AddDefaultTokenProviders();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IPasswordHelpService, PasswordHelpService>();
         services.AddScoped<IAccountAdministrationService, AccountAdministrationService>();
         services.AddScoped<IIdentityBootstrapper, IdentityBootstrapper>();
 

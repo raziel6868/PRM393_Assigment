@@ -16,6 +16,22 @@ public sealed record RefreshRequest(string ClientType, string? RefreshToken);
 
 public sealed record LogoutRequest(string ClientType, string? RefreshToken);
 
+public sealed record PasswordHelpSubmissionRequest(
+    [param: Required(ErrorMessage = "Vui lòng nhập email hoặc mã tài khoản.")]
+    [param: MaxLength(256, ErrorMessage = "Email hoặc mã tài khoản không được vượt quá 256 ký tự.")]
+    string EmailOrUserName);
+
+public sealed record ChangeTemporaryPasswordRequest(
+    [param: Required(ErrorMessage = "Vui lòng nhập mật khẩu tạm hiện tại.")]
+    [param: MaxLength(256, ErrorMessage = "Mật khẩu hiện tại không hợp lệ.")]
+    string CurrentPassword,
+    [param: Required(ErrorMessage = "Vui lòng nhập mật khẩu mới.")]
+    [param: MinLength(12, ErrorMessage = "Mật khẩu mới phải có ít nhất 12 ký tự.")]
+    [param: MaxLength(256, ErrorMessage = "Mật khẩu mới không hợp lệ.")]
+    string NewPassword,
+    [param: Required(ErrorMessage = "Vui lòng xác nhận mật khẩu mới.")]
+    string Confirmation);
+
 public sealed record ProvisionUserRequest(
     [param: Required(ErrorMessage = "Vui lòng nhập họ và tên.")]
     [param: MaxLength(200, ErrorMessage = "Họ và tên không được vượt quá 200 ký tự.")]

@@ -6,11 +6,13 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 using MyFSchool.Api.Identity;
 using MyFSchool.Application.Identity;
 using MyFSchool.Infrastructure;
 using MyFSchool.Infrastructure.Configuration;
+using MyFSchool.Infrastructure.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -77,6 +79,27 @@ builder.Services
         };
         options.Events = new JwtBearerEvents
         {
+            OnTokenValidated = async context =>
+            {
+                var subject = context.Principal?.FindFirst("sub")?.Value;
+                var sessionVersion = context.Principal?.FindFirst(SessionVersion.ClaimName)?.Value;
+                var restrictedClaim = context.Principal?.FindFirst("passwordChangeRequired")?.Value;
+                if (!Guid.TryParse(subject, out var userId))
+                {
+                    context.Fail("Invalid session.");
+                    return;
+                }
+
+                var userManager = context.HttpContext.RequestServices.GetRequiredService<UserManager<AppUser>>();
+                var user = await userManager.FindByIdAsync(userId.ToString());
+                var expectedRestrictedClaim = user?.MustChangePassword == true ? "true" : "false";
+                if (user is null || !user.IsActive ||
+                    !SessionVersion.Matches(sessionVersion, user.SecurityStamp ?? string.Empty) ||
+                    !string.Equals(restrictedClaim, expectedRestrictedClaim, StringComparison.Ordinal))
+                {
+                    context.Fail("Invalid session.");
+                }
+            },
             OnChallenge = async context =>
             {
                 context.HandleResponse();
@@ -119,6 +142,15 @@ builder.Services.AddRateLimiter(options =>
         _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = 20,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        }));
+    options.AddPolicy("password-help", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0,
             AutoReplenishment = true

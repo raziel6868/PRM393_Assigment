@@ -79,6 +79,7 @@ public sealed class AuthService(
             user.DisplayName,
             roles,
             passwordChangeRequired,
+            user.SecurityStamp ?? string.Empty,
             lifetime));
 
         string? rawRefreshToken = null;
@@ -179,6 +180,7 @@ public sealed class AuthService(
             user.DisplayName,
             roles,
             false,
+            user.SecurityStamp ?? string.Empty,
             TimeSpan.FromMinutes(_authOptions.AccessTokenMinutes)));
         return OperationResult<AuthSession>.Success(new AuthSession(
             user.Id,
@@ -206,6 +208,60 @@ public sealed class AuthService(
         await RevokeFamilyAsync(storedToken.FamilyId, nowUtc, "logout", cancellationToken);
         await AddAuditAsync("logout", storedToken.UserId, storedToken.UserId, command.CorrelationId, cancellationToken, false);
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<OperationResult<bool>> ChangeTemporaryPasswordAsync(
+        ChangeTemporaryPasswordCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (string.Equals(command.CurrentPassword, command.NewPassword, StringComparison.Ordinal))
+        {
+            return OperationResult<bool>.Failure("newPasswordMustDiffer");
+        }
+        var nowUtc = timeProvider.GetUtcNow();
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var activeTokens = await dbContext.RefreshTokens
+            .FromSqlInterpolated($"SELECT * FROM [RefreshTokens] WITH (UPDLOCK, HOLDLOCK) WHERE [UserId] = {command.UserId} AND [RevokedAtUtc] IS NULL")
+            .ToListAsync(cancellationToken);
+        var user = await userManager.FindByIdAsync(command.UserId.ToString());
+        if (user is null || !user.IsActive || !user.MustChangePassword)
+        {
+            return OperationResult<bool>.Failure("temporaryPasswordChangeNotRequired");
+        }
+        if (user.TemporaryPasswordExpiresAtUtc is null || user.TemporaryPasswordExpiresAtUtc <= nowUtc)
+        {
+            return OperationResult<bool>.Failure("temporaryPasswordExpired");
+        }
+
+        var changeResult = await userManager.ChangePasswordAsync(user, command.CurrentPassword, command.NewPassword);
+        if (!changeResult.Succeeded)
+        {
+            return OperationResult<bool>.Failure(
+                changeResult.Errors.Any(error => error.Code == "PasswordMismatch")
+                    ? "invalidCurrentPassword"
+                    : "passwordValidationFailed");
+        }
+
+        user.MustChangePassword = false;
+        user.TemporaryPasswordExpiresAtUtc = null;
+        user.UpdatedAtUtc = nowUtc;
+        EnsureSucceeded(await userManager.UpdateAsync(user));
+
+        foreach (var token in activeTokens)
+        {
+            token.RevokedAtUtc = nowUtc;
+            token.RevocationReason = "passwordChanged";
+        }
+        await AddAuditAsync(
+            "temporaryPasswordChanged",
+            user.Id,
+            user.Id,
+            command.CorrelationId,
+            cancellationToken,
+            false);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return OperationResult<bool>.Success(true);
     }
 
     public async Task<SessionContext?> GetSessionAsync(Guid userId, CancellationToken cancellationToken)
