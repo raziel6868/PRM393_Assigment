@@ -94,6 +94,8 @@ public static class DependencyInjection
         services.AddScoped<IGradeAdministrationService, GradeAdministrationService>();
         services.AddScoped<ITimetableQueryService, TimetableQueryService>();
         services.AddScoped<IEventQueryService, EventQueryService>();
+        services.AddScoped<IAnnouncementAdministrationService, AnnouncementAdministrationService>();
+        services.AddScoped<IAnnouncementQueryService, AnnouncementQueryService>();
 
         services
             .AddOptions<StorageOptions>()

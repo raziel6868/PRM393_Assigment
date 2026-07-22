@@ -1054,6 +1054,41 @@ namespace MyFSchool.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
+
+            modelBuilder.Entity("MyFSchool.Domain.School.FeedPost", b =>
+                {
+                    b.HasOne("MyFSchool.Domain.School.ClassRoom", "TargetClass")
+                        .WithMany()
+                        .HasForeignKey("TargetClassId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                    b.Navigation("TargetClass");
+                });
+
+            modelBuilder.Entity("MyFSchool.Domain.School.AnnouncementDelivery", b =>
+                {
+                    b.HasOne("MyFSchool.Domain.School.FeedPost", "FeedPost")
+                        .WithMany("Deliveries")
+                        .HasForeignKey("FeedPostId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                    b.Navigation("FeedPost");
+                });
+
+            modelBuilder.Entity("MyFSchool.Domain.School.AnnouncementReadState", b =>
+                {
+                    b.HasOne("MyFSchool.Domain.School.FeedPost", "FeedPost")
+                        .WithMany("ReadStates")
+                        .HasForeignKey("FeedPostId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                    b.Navigation("FeedPost");
+                });
+
+            modelBuilder.Entity("MyFSchool.Domain.School.FeedPost", b =>
+                {
+                    b.Navigation("Deliveries");
+                    b.Navigation("ReadStates");
+                });
 #pragma warning restore 612, 618
         }
     }

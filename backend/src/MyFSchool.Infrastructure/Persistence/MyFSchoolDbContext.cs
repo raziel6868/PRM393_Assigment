@@ -49,6 +49,12 @@ public sealed class MyFSchoolDbContext(DbContextOptions<MyFSchoolDbContext> opti
 
     public DbSet<SchoolEvent> SchoolEvents => Set<SchoolEvent>();
 
+    public DbSet<FeedPost> FeedPosts => Set<FeedPost>();
+
+    public DbSet<AnnouncementDelivery> AnnouncementDeliveries => Set<AnnouncementDelivery>();
+
+    public DbSet<AnnouncementReadState> AnnouncementReadStates => Set<AnnouncementReadState>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -319,6 +325,42 @@ public sealed class MyFSchoolDbContext(DbContextOptions<MyFSchoolDbContext> opti
             entity.Property(item => item.CreatedAtUtc).HasPrecision(0);
             entity.Property(item => item.RowVersion).IsRowVersion();
             entity.HasIndex(item => item.EndAtUtc);
+        });
+
+        builder.Entity<FeedPost>(entity =>
+        {
+            entity.ToTable("FeedPosts");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Title).HasMaxLength(100).IsRequired();
+            entity.Property(item => item.Body).HasMaxLength(4000).IsRequired();
+            entity.Property(item => item.AuthorDisplayName).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.ImageUrl).HasMaxLength(500);
+            entity.Property(item => item.CreatedAtUtc).HasPrecision(0);
+            entity.Property(item => item.PublishedAtUtc).HasPrecision(0);
+            entity.Property(item => item.RowVersion).IsRowVersion();
+            entity.HasIndex(item => item.IsPublished);
+            entity.HasIndex(item => item.CreatedAtUtc);
+            entity.HasOne<ClassRoom>().WithMany().HasForeignKey(item => item.TargetClassId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<AnnouncementDelivery>(entity =>
+        {
+            entity.ToTable("AnnouncementDeliveries");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.RecipientDisplayName).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.SentAtUtc).HasPrecision(0);
+            entity.Property(item => item.FailureReason).HasMaxLength(500);
+            entity.HasIndex(item => new { item.FeedPostId, item.RecipientUserId, item.Channel }).IsUnique();
+            entity.HasOne<FeedPost>().WithMany(p => p.Deliveries).HasForeignKey(item => item.FeedPostId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<AnnouncementReadState>(entity =>
+        {
+            entity.ToTable("AnnouncementReadStates");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.ReadAtUtc).HasPrecision(0);
+            entity.HasIndex(item => new { item.FeedPostId, item.UserId }).IsUnique();
+            entity.HasOne<FeedPost>().WithMany(p => p.ReadStates).HasForeignKey(item => item.FeedPostId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 
