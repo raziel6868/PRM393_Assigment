@@ -15,4 +15,6 @@ public sealed class ParentStudentLink
     public bool IsActive { get; set; } = true;
 
     public DateTimeOffset CreatedAtUtc { get; set; }
+
+    public byte[] RowVersion { get; set; } = [];
 }

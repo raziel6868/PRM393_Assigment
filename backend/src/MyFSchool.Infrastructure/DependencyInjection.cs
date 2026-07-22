@@ -81,6 +81,8 @@ public static class DependencyInjection
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IPasswordHelpService, PasswordHelpService>();
         services.AddScoped<IAccountAdministrationService, AccountAdministrationService>();
+        services.AddScoped<IIdentityRelationshipAdministrationService, RelationshipAdministrationService>();
+        services.AddScoped<IRelationshipAuthorizationService, RelationshipAuthorizationService>();
         services.AddScoped<IIdentityBootstrapper, IdentityBootstrapper>();
 
         services

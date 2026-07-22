@@ -45,4 +45,5 @@ public static class SchoolPolicies
 {
     public const string AuthenticatedSession = "AuthenticatedSession";
     public const string Administrator = "Administrator";
+    public const string Parent = "Parent";
 }

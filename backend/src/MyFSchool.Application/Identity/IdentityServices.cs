@@ -39,6 +39,41 @@ public interface IPasswordHelpService
     Task SubmitAsync(string emailOrUserName, string correlationId, CancellationToken cancellationToken);
 }
 
+public interface IIdentityRelationshipAdministrationService
+{
+    Task<OperationResult<IdentityProfileResult>> CreateTeacherProfileAsync(
+        CreateIdentityProfileCommand command,
+        CancellationToken cancellationToken);
+
+    Task<OperationResult<IdentityProfileResult>> CreateStudentProfileAsync(
+        CreateIdentityProfileCommand command,
+        CancellationToken cancellationToken);
+
+    Task<OperationResult<IdentityProfileResult>> CreateParentProfileAsync(
+        CreateIdentityProfileCommand command,
+        CancellationToken cancellationToken);
+
+    Task<OperationResult<ParentStudentLinkResult>> CreateParentStudentLinkAsync(
+        CreateParentStudentLinkCommand command,
+        CancellationToken cancellationToken);
+
+    Task<OperationResult<ParentStudentLinkResult>> UpdateParentStudentLinkAsync(
+        UpdateParentStudentLinkCommand command,
+        CancellationToken cancellationToken);
+}
+
+public interface IRelationshipAuthorizationService
+{
+    Task<IReadOnlyList<LinkedChild>> GetLinkedChildrenAsync(
+        Guid userId,
+        CancellationToken cancellationToken);
+
+    Task<bool> CanAccessStudentAsync(
+        Guid userId,
+        Guid studentProfileId,
+        CancellationToken cancellationToken);
+}
+
 public interface IAccessTokenIssuer
 {
     AccessToken Issue(AccessTokenDescriptor descriptor);

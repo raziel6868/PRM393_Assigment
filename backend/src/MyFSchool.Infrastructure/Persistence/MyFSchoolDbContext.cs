@@ -97,7 +97,9 @@ public sealed class MyFSchoolDbContext(DbContextOptions<MyFSchoolDbContext> opti
             entity.ToTable("ParentStudentLinks");
             entity.HasKey(link => link.Id);
             entity.Property(link => link.CreatedAtUtc).HasPrecision(0);
+            entity.Property(link => link.RowVersion).IsRowVersion();
             entity.HasIndex(link => new { link.ParentProfileId, link.StudentProfileId }).IsUnique();
+            entity.HasIndex(link => new { link.ParentProfileId, link.IsActive });
             entity.HasIndex(link => new { link.StudentProfileId, link.IsActive });
             entity.HasOne<ParentProfile>().WithMany().HasForeignKey(link => link.ParentProfileId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<StudentProfile>().WithMany().HasForeignKey(link => link.StudentProfileId).OnDelete(DeleteBehavior.NoAction);
