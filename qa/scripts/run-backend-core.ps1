@@ -43,6 +43,7 @@ $scenarioResults = [ordered]@{
 if ($IncludeIdentity) {
     $scenarioResults.identityMigration = 'pending'
     $scenarioResults.identityAuth = 'pending'
+    $scenarioResults.passwordAssistance = 'pending'
     $scenarioResults.identityPersistence = 'pending'
 }
 $importedEnvironmentNames = [System.Collections.Generic.List[string]]::new()
@@ -312,7 +313,10 @@ SELECT
     (SELECT COUNT(*) FROM SecurityAuditEvents) AS AuditCount,
     (SELECT COUNT(*) FROM RefreshTokens) AS RefreshCount,
     (SELECT COUNT(*) FROM RefreshTokens WHERE LEN(TokenHash) <> 44) AS InvalidHashCount,
-    (SELECT COUNT(*) FROM Users WHERE MustChangePassword = 1 AND TemporaryPasswordExpiresAtUtc IS NOT NULL) AS RestrictedUserCount
+    (SELECT COUNT(*) FROM Users WHERE MustChangePassword = 1 AND TemporaryPasswordExpiresAtUtc IS NOT NULL) AS RestrictedUserCount,
+    (SELECT COUNT(*) FROM PasswordHelpRequests WHERE Status = 0) AS PendingHelpCount,
+    (SELECT COUNT(*) FROM PasswordHelpRequests WHERE Status = 1) AS ResolvedHelpCount,
+    (SELECT COUNT(*) FROM PasswordHelpRequests WHERE Status = 2) AS RejectedHelpCount
 '@
             $reader = $command.ExecuteReader()
             try {
@@ -322,7 +326,10 @@ SELECT
                     $reader.GetInt32(2) -lt 4 -or
                     $reader.GetInt32(3) -lt 3 -or
                     $reader.GetInt32(4) -ne 0 -or
-                    $reader.GetInt32(5) -ne 2) {
+                    $reader.GetInt32(5) -ne 4 -or
+                    $reader.GetInt32(6) -ne 0 -or
+                    $reader.GetInt32(7) -ne 1 -or
+                    $reader.GetInt32(8) -ne 1) {
                     throw 'Identity persistence counts or token-hash invariants did not match the accepted flow.'
                 }
             }
@@ -386,7 +393,10 @@ function Write-ResultManifest {
     else { $null }
     $inputFiles = @(
         Get-ChildItem -LiteralPath (Join-Path $repositoryRoot 'backend\src') -Recurse -File |
-            Where-Object { $_.Extension -in @('.cs', '.csproj', '.json') }
+            Where-Object {
+                $_.Extension -in @('.cs', '.csproj', '.json') -and
+                $_.FullName -notmatch '[\\/](bin|obj)[\\/]'
+            }
         Get-ChildItem -LiteralPath (Join-Path $repositoryRoot 'qa\api') -Recurse -File |
             Where-Object { $_.FullName -notmatch '[\\/]node_modules[\\/]' }
         Get-Item -LiteralPath (Join-Path $repositoryRoot 'qa\scripts\run-backend-core.ps1')
@@ -601,6 +611,15 @@ try {
         $failureContext.routeOrStep = 'sign-in, session, provision, refresh rotation/reuse, logout'
         & (Join-Path $PSScriptRoot 'run-smoke.ps1') -ApiOrigin 'http://127.0.0.1:5080' -Scenario 'identity-auth' -ThrowOnFailure
         $scenarioResults.identityAuth = 'passed'
+        $currentPhase = 'password-assistance'
+        $failureContext.command = 'npm run password-assistance'
+        $failureContext.scenario = 'password-assistance'
+        $failureContext.exitCodeOrTimeout = 'not-applicable'
+        $failureContext.stableError = 'password-assistance-contract-failed'
+        $failureContext.routeOrStep = 'generic request, Admin decision, temporary password, forced change, revocation'
+        Start-ApiProcess -Port 5082 -ConfiguredStorageRoot $storageRoot -LogName 'password-assistance' -ApplicationConnectionString $applicationConnectionString
+        & (Join-Path $PSScriptRoot 'run-smoke.ps1') -ApiOrigin 'http://127.0.0.1:5082' -Scenario 'password-assistance' -ThrowOnFailure
+        $scenarioResults.passwordAssistance = 'passed'
         $currentPhase = 'identity-persistence'
         $failureContext.command = 'Assert-IdentityPersistence'
         $failureContext.scenario = 'identity-persistence'
