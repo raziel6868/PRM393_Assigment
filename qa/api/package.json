@@ -6,6 +6,7 @@
     "smoke": "node tests/health.mjs",
     "core-contract": "node tests/core-contract.mjs",
     "identity-auth": "node tests/identity-auth.mjs",
-    "password-assistance": "node tests/password-assistance.mjs"
+    "password-assistance": "node tests/password-assistance.mjs",
+    "identity-relationships": "node tests/identity-relationships.mjs"
   }
 }

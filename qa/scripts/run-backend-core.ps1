@@ -316,20 +316,32 @@ SELECT
     (SELECT COUNT(*) FROM Users WHERE MustChangePassword = 1 AND TemporaryPasswordExpiresAtUtc IS NOT NULL) AS RestrictedUserCount,
     (SELECT COUNT(*) FROM PasswordHelpRequests WHERE Status = 0) AS PendingHelpCount,
     (SELECT COUNT(*) FROM PasswordHelpRequests WHERE Status = 1) AS ResolvedHelpCount,
-    (SELECT COUNT(*) FROM PasswordHelpRequests WHERE Status = 2) AS RejectedHelpCount
+    (SELECT COUNT(*) FROM PasswordHelpRequests WHERE Status = 2) AS RejectedHelpCount,
+    (SELECT COUNT(*) FROM ParentProfiles WHERE IsActive = 1) AS ActiveParentProfileCount,
+    (SELECT COUNT(*) FROM StudentProfiles WHERE IsActive = 1) AS ActiveStudentProfileCount,
+    (SELECT COUNT(*) FROM ParentStudentLinks WHERE IsActive = 1) AS ActiveParentStudentLinkCount,
+    (SELECT COUNT(*) FROM SecurityAuditEvents WHERE EventType = 'identityProfileCreated') AS ProfileAuditCount,
+    (SELECT COUNT(*) FROM SecurityAuditEvents WHERE EventType = 'parentStudentLinkCreated') AS LinkCreatedAuditCount,
+    (SELECT COUNT(*) FROM SecurityAuditEvents WHERE EventType = 'parentStudentLinkUpdated') AS LinkUpdatedAuditCount
 '@
             $reader = $command.ExecuteReader()
             try {
                 if (-not $reader.Read() -or
                     $reader.GetInt32(0) -lt 2 -or
                     $reader.GetInt32(1) -ne 4 -or
-                    $reader.GetInt32(2) -lt 4 -or
+                    $reader.GetInt32(2) -lt 9 -or
                     $reader.GetInt32(3) -lt 3 -or
                     $reader.GetInt32(4) -ne 0 -or
-                    $reader.GetInt32(5) -ne 4 -or
+                    $reader.GetInt32(5) -ne 6 -or
                     $reader.GetInt32(6) -ne 0 -or
                     $reader.GetInt32(7) -ne 1 -or
-                    $reader.GetInt32(8) -ne 1) {
+                    $reader.GetInt32(8) -ne 1 -or
+                    $reader.GetInt32(9) -ne 1 -or
+                    $reader.GetInt32(10) -ne 1 -or
+                    $reader.GetInt32(11) -ne 1 -or
+                    $reader.GetInt32(12) -ne 2 -or
+                    $reader.GetInt32(13) -ne 1 -or
+                    $reader.GetInt32(14) -ne 2) {
                     throw 'Identity persistence counts or token-hash invariants did not match the accepted flow.'
                 }
             }
@@ -620,6 +632,14 @@ try {
         Start-ApiProcess -Port 5082 -ConfiguredStorageRoot $storageRoot -LogName 'password-assistance' -ApplicationConnectionString $applicationConnectionString
         & (Join-Path $PSScriptRoot 'run-smoke.ps1') -ApiOrigin 'http://127.0.0.1:5082' -Scenario 'password-assistance' -ThrowOnFailure
         $scenarioResults.passwordAssistance = 'passed'
+        $currentPhase = 'identity-relationships'
+        $failureContext.command = 'npm run identity-relationships'
+        $failureContext.scenario = 'identity-relationships'
+        $failureContext.exitCodeOrTimeout = 'not-applicable'
+        $failureContext.stableError = 'identity-relationships-contract-failed'
+        $failureContext.routeOrStep = 'profiles, parent-student link, self-scoped children, concurrency'
+        & (Join-Path $PSScriptRoot 'run-smoke.ps1') -ApiOrigin 'http://127.0.0.1:5082' -Scenario 'identity-relationships' -ThrowOnFailure
+        $scenarioResults.identityRelationships = 'passed'
         $currentPhase = 'identity-persistence'
         $failureContext.command = 'Assert-IdentityPersistence'
         $failureContext.scenario = 'identity-persistence'
