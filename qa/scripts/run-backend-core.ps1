@@ -52,6 +52,7 @@ if ($IncludeIdentity) {
 }
 if ($IncludeSchoolReference) {
     $scenarioResults.schoolReference = 'pending'
+    $scenarioResults.attendance = 'pending'
 }
 $importedEnvironmentNames = [System.Collections.Generic.List[string]]::new()
 $managedEnvironmentNames = @(
@@ -666,6 +667,14 @@ try {
         $failureContext.routeOrStep = 'school year, class, subject, teacher assignment, student enrollment, /me/classes scoping'
         & (Join-Path $PSScriptRoot 'run-smoke.ps1') -ApiOrigin 'http://127.0.0.1:5082' -Scenario 'school-reference' -ThrowOnFailure
         $scenarioResults.schoolReference = 'passed'
+        $currentPhase = 'attendance'
+        $failureContext.command = 'npm run attendance'
+        $failureContext.scenario = 'attendance'
+        $failureContext.exitCodeOrTimeout = 'not-applicable'
+        $failureContext.stableError = 'attendance-contract-failed'
+        $failureContext.routeOrStep = 'teacher roster, save, concurrency, student/parent history'
+        & (Join-Path $PSScriptRoot 'run-smoke.ps1') -ApiOrigin 'http://127.0.0.1:5082' -Scenario 'attendance' -ThrowOnFailure
+        $scenarioResults.attendance = 'passed'
     }
 
     $currentPhase = 'ready'
