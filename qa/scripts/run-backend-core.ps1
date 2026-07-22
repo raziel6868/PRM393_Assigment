@@ -1,5 +1,8 @@
 [CmdletBinding()]
-param([switch]$IncludeIdentity)
+param(
+    [switch]$IncludeIdentity,
+    [switch]$IncludeSchoolReference
+)
 
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -45,6 +48,10 @@ if ($IncludeIdentity) {
     $scenarioResults.identityAuth = 'pending'
     $scenarioResults.passwordAssistance = 'pending'
     $scenarioResults.identityPersistence = 'pending'
+    $scenarioResults.identityRelationships = 'pending'
+}
+if ($IncludeSchoolReference) {
+    $scenarioResults.schoolReference = 'pending'
 }
 $importedEnvironmentNames = [System.Collections.Generic.List[string]]::new()
 $managedEnvironmentNames = @(
@@ -648,6 +655,17 @@ try {
         $failureContext.routeOrStep = 'users, roles, audits, hashed refresh tokens, restricted user'
         Assert-IdentityPersistence -ApplicationConnectionString $applicationConnectionString
         $scenarioResults.identityPersistence = 'passed'
+    }
+
+    if ($IncludeSchoolReference) {
+        $currentPhase = 'school-reference'
+        $failureContext.command = 'npm run school-reference'
+        $failureContext.scenario = 'school-reference'
+        $failureContext.exitCodeOrTimeout = 'not-applicable'
+        $failureContext.stableError = 'school-reference-contract-failed'
+        $failureContext.routeOrStep = 'school year, class, subject, teacher assignment, student enrollment, /me/classes scoping'
+        & (Join-Path $PSScriptRoot 'run-smoke.ps1') -ApiOrigin 'http://127.0.0.1:5082' -Scenario 'school-reference' -ThrowOnFailure
+        $scenarioResults.schoolReference = 'passed'
     }
 
     $currentPhase = 'ready'

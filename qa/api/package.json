@@ -7,6 +7,7 @@
     "core-contract": "node tests/core-contract.mjs",
     "identity-auth": "node tests/identity-auth.mjs",
     "password-assistance": "node tests/password-assistance.mjs",
-    "identity-relationships": "node tests/identity-relationships.mjs"
+    "identity-relationships": "node tests/identity-relationships.mjs",
+    "school-reference": "node tests/school-reference.mjs"
   }
 }
