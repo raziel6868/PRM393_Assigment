@@ -90,6 +90,10 @@ public static class DependencyInjection
         services.AddScoped<ISchoolScopeQueryService, SchoolScopeQueryService>();
         services.AddScoped<IAttendanceAdministrationService, AttendanceAdministrationService>();
         services.AddScoped<ILeaveRequestAdministrationService, LeaveRequestAdministrationService>();
+        services.AddScoped<IClubAdministrationService, ClubAdministrationService>();
+        services.AddScoped<IGradeAdministrationService, GradeAdministrationService>();
+        services.AddScoped<ITimetableQueryService, TimetableQueryService>();
+        services.AddScoped<IEventQueryService, EventQueryService>();
 
         services
             .AddOptions<StorageOptions>()
