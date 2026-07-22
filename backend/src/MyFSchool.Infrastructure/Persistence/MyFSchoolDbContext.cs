@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using MyFSchool.Domain.Identity;
+using MyFSchool.Domain.School;
 using MyFSchool.Infrastructure.Identity;
 
 namespace MyFSchool.Infrastructure.Persistence;
@@ -21,6 +22,16 @@ public sealed class MyFSchoolDbContext(DbContextOptions<MyFSchoolDbContext> opti
     public DbSet<ParentProfile> ParentProfiles => Set<ParentProfile>();
 
     public DbSet<ParentStudentLink> ParentStudentLinks => Set<ParentStudentLink>();
+
+    public DbSet<SchoolYear> SchoolYears => Set<SchoolYear>();
+
+    public DbSet<ClassRoom> ClassRooms => Set<ClassRoom>();
+
+    public DbSet<Subject> Subjects => Set<Subject>();
+
+    public DbSet<TeacherClassSubjectAssignment> TeacherClassSubjectAssignments => Set<TeacherClassSubjectAssignment>();
+
+    public DbSet<StudentEnrollment> StudentEnrollments => Set<StudentEnrollment>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -103,6 +114,70 @@ public sealed class MyFSchoolDbContext(DbContextOptions<MyFSchoolDbContext> opti
             entity.HasIndex(link => new { link.StudentProfileId, link.IsActive });
             entity.HasOne<ParentProfile>().WithMany().HasForeignKey(link => link.ParentProfileId).OnDelete(DeleteBehavior.NoAction);
             entity.HasOne<StudentProfile>().WithMany().HasForeignKey(link => link.StudentProfileId).OnDelete(DeleteBehavior.NoAction);
+        });
+
+        builder.Entity<SchoolYear>(entity =>
+        {
+            entity.ToTable("SchoolYears");
+            entity.HasKey(year => year.Id);
+            entity.Property(year => year.Code).HasMaxLength(20).IsRequired();
+            entity.Property(year => year.DisplayName).HasMaxLength(200).IsRequired();
+            entity.Property(year => year.CreatedAtUtc).HasPrecision(0);
+            entity.Property(year => year.RowVersion).IsRowVersion();
+            entity.HasIndex(year => year.Code).IsUnique();
+            entity.HasCheckConstraint("CK_SchoolYears_DateRange", "[EndDate] >= [StartDate]");
+        });
+
+        builder.Entity<ClassRoom>(entity =>
+        {
+            entity.ToTable("ClassRooms");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Code).HasMaxLength(20).IsRequired();
+            entity.Property(item => item.DisplayName).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.CreatedAtUtc).HasPrecision(0);
+            entity.Property(item => item.RowVersion).IsRowVersion();
+            entity.HasIndex(item => new { item.Code, item.SchoolYearId }).IsUnique();
+            entity.HasIndex(item => item.SchoolYearId);
+            entity.HasOne<SchoolYear>().WithMany().HasForeignKey(item => item.SchoolYearId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<TeacherProfile>().WithMany().HasForeignKey(item => item.HomeroomTeacherProfileId).OnDelete(DeleteBehavior.NoAction);
+        });
+
+        builder.Entity<Subject>(entity =>
+        {
+            entity.ToTable("Subjects");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Code).HasMaxLength(20).IsRequired();
+            entity.Property(item => item.DisplayName).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.CreatedAtUtc).HasPrecision(0);
+            entity.Property(item => item.RowVersion).IsRowVersion();
+            entity.HasIndex(item => item.Code).IsUnique();
+        });
+
+        builder.Entity<TeacherClassSubjectAssignment>(entity =>
+        {
+            entity.ToTable("TeacherClassSubjectAssignments");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.CreatedAtUtc).HasPrecision(0);
+            entity.Property(item => item.RowVersion).IsRowVersion();
+            entity.HasIndex(item => new { item.TeacherProfileId, item.ClassId, item.SubjectId, item.SchoolYearId }).IsUnique();
+            entity.HasIndex(item => new { item.ClassId, item.SubjectId, item.SchoolYearId });
+            entity.HasOne<TeacherProfile>().WithMany().HasForeignKey(item => item.TeacherProfileId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ClassRoom>().WithMany().HasForeignKey(item => item.ClassId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Subject>().WithMany().HasForeignKey(item => item.SubjectId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<SchoolYear>().WithMany().HasForeignKey(item => item.SchoolYearId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<StudentEnrollment>(entity =>
+        {
+            entity.ToTable("StudentEnrollments");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.CreatedAtUtc).HasPrecision(0);
+            entity.Property(item => item.RowVersion).IsRowVersion();
+            entity.HasIndex(item => new { item.StudentProfileId, item.ClassId, item.SchoolYearId }).IsUnique();
+            entity.HasIndex(item => new { item.ClassId, item.SchoolYearId });
+            entity.HasOne<StudentProfile>().WithMany().HasForeignKey(item => item.StudentProfileId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ClassRoom>().WithMany().HasForeignKey(item => item.ClassId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<SchoolYear>().WithMany().HasForeignKey(item => item.SchoolYearId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 

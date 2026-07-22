@@ -7,10 +7,12 @@ using Microsoft.AspNetCore.DataProtection;
 using System.Text;
 using MyFSchool.Application.Readiness;
 using MyFSchool.Application.Identity;
+using MyFSchool.Application.School;
 using MyFSchool.Infrastructure.Configuration;
 using MyFSchool.Infrastructure.Readiness;
 using MyFSchool.Infrastructure.Identity;
 using MyFSchool.Infrastructure.Persistence;
+using MyFSchool.Infrastructure.School;
 
 namespace MyFSchool.Infrastructure;
 
@@ -84,6 +86,8 @@ public static class DependencyInjection
         services.AddScoped<IIdentityRelationshipAdministrationService, RelationshipAdministrationService>();
         services.AddScoped<IRelationshipAuthorizationService, RelationshipAuthorizationService>();
         services.AddScoped<IIdentityBootstrapper, IdentityBootstrapper>();
+        services.AddScoped<ISchoolReferenceAdministrationService, SchoolReferenceAdministrationService>();
+        services.AddScoped<ISchoolScopeQueryService, SchoolScopeQueryService>();
 
         services
             .AddOptions<StorageOptions>()
