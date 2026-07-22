@@ -104,7 +104,11 @@ const session = await sessionResponse.json();
 assert.equal(session.userId, mobileLogin.userId);
 assert.deepEqual(session.roles, ['administrator']);
 
-const tamperedAccessToken = `${mobileLogin.accessToken.slice(0, -1)}${mobileLogin.accessToken.endsWith('a') ? 'b' : 'a'}`;
+const tokenSegments = mobileLogin.accessToken.split('.');
+assert.equal(tokenSegments.length, 3);
+const signatureIndex = Math.floor(tokenSegments[2].length / 2);
+tokenSegments[2] = `${tokenSegments[2].slice(0, signatureIndex)}${tokenSegments[2][signatureIndex] === 'a' ? 'b' : 'a'}${tokenSegments[2].slice(signatureIndex + 1)}`;
+const tamperedAccessToken = tokenSegments.join('.');
 await problem(await request('/api/v1/auth/session', { token: tamperedAccessToken }), 401, 'unauthorized');
 
 await problem(await request('/api/v1/admin/users', {
