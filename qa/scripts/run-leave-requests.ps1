@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [int]$ApiPort = 5084,
+    [int]$ApiPort = 5086,
     [switch]$KeepDatabase
 )
 
@@ -11,14 +11,13 @@ $apiDirectory = Join-Path $repositoryRoot 'backend\src\MyFSchool.Api'
 $apiAssembly = Join-Path $apiDirectory 'bin\Release\net10.0\MyFSchool.Api.dll'
 
 # Ensure Release build is up to date before running scenario.
-Write-Host "[grades-qa] building backend Release"
+Write-Host "[leave-qa] building backend Release"
 & dotnet build (Join-Path $backendDirectory 'MyFSchool.sln') --configuration Release --no-restore
 if ($LASTEXITCODE -ne 0) { throw "Release build failed." }
 if (-not (Test-Path -LiteralPath $apiAssembly)) {
     throw "Release build did not produce the API artifact: $apiAssembly"
 }
 
-# Generate a safe, unique run identity so we never collide with another run.
 $runId = '{0}_{1}' -f (Get-Date -Format 'yyyyMMddHHmmss'), ([Guid]::NewGuid().ToString('N').Substring(0, 8))
 if ($runId -notmatch '^[0-9]{14}_[a-f0-9]{8}$') {
     throw "Unsafe run id format: $runId"
@@ -32,12 +31,9 @@ if ($databaseName -notmatch '^MyFSchool_QA_[0-9]{14}_[a-f0-9]{8}$') {
 $artifactDirectory = Join-Path $repositoryRoot "qa\artifacts\$runId"
 $logsDirectory = Join-Path $artifactDirectory 'logs'
 $null = New-Item -ItemType Directory -Force -Path $logsDirectory
-# Storage must live outside the repository; the artifact directory is inside
-# the repo, so put the storage root under the OS temp directory instead.
-$storageRoot = Join-Path ([System.IO.Path]::GetTempPath()) "MyFSchool-QA-$runId"
+$storageRoot = Join-Path ([System.IO.Path]::GetTempPath()) "MyFSchool-QA-leave-$runId"
 $null = New-Item -ItemType Directory -Force -Path $storageRoot
 
-# Pull required inputs from the repository-root .env (single source of truth).
 $envFile = Join-Path $repositoryRoot '.env'
 if (-not (Test-Path -LiteralPath $envFile)) {
     throw "Repository-root .env not found at $envFile."
@@ -69,11 +65,10 @@ $applicationConnectionBuilder['Initial Catalog'] = $databaseName
 $applicationConnectionString = $applicationConnectionBuilder.ConnectionString
 
 $adminPassword = "Qa!A7-$runId"
-$adminUserName = "qa-grades-$runId"
-$adminEmail = "qa-grades-$runId@example.invalid"
+$adminUserName = "qa-leave-$runId"
+$adminEmail = "qa-leave-$runId@example.invalid"
 $bootstrapDisplayName = 'Quản trị viên QA'
 
-# Owned resources to clean up on exit.
 $ownedProcesses = New-Object System.Collections.Generic.List[object]
 $databaseCreated = $false
 $databaseDropped = $true
@@ -153,8 +148,6 @@ function Start-IsolatedApiProcess {
     $stdoutLog = Join-Path $LogPath 'api.out.log'
     $stderrLog = Join-Path $LogPath 'api.err.log'
 
-    # Start-Process gives us reliable file redirection for the child API.
-    # We track the child process by StartTime so we only kill what we own.
     $proc = Start-Process -FilePath 'dotnet' `
         -ArgumentList "`"$apiAssembly`"" `
         -WorkingDirectory $apiDirectory `
@@ -165,10 +158,6 @@ function Start-IsolatedApiProcess {
     $proc | Add-Member -NotePropertyName 'ApiStartedAt' -NotePropertyValue (Get-Date) -Force
     $ownedProcesses.Add($proc)
 
-    # Poll /health with bounded retries. Treat any reachable response (any
-    # status code) as "the process is listening"; a non-200 just means
-    # migrations or warm-up are still happening. We then issue a second
-    # bounded wait until /health itself is 200.
     $listeningDeadline = (Get-Date).AddSeconds(30)
     $listening = $false
     while ((Get-Date) -lt $listeningDeadline) {
@@ -203,9 +192,7 @@ function Start-IsolatedApiProcess {
 function Stop-OwnedApiProcesses {
     foreach ($p in $ownedProcesses) {
         if ($p.HasExited) { continue }
-        try {
-            $p.CloseMainWindow() | Out-Null
-        } catch { }
+        try { $p.CloseMainWindow() | Out-Null } catch { }
         try { $p.Kill(); $p.WaitForExit(10) | Out-Null } catch { }
     }
 }
@@ -220,20 +207,17 @@ Save-CurrentEnv @(
 )
 
 $startedAt = Get-Date
-Write-Host "[grades-qa] run=$runId db=$databaseName port=$ApiPort started=$($startedAt.ToString('o'))"
+Write-Host "[leave-qa] run=$runId db=$databaseName port=$ApiPort started=$($startedAt.ToString('o'))"
 
 try {
     Test-PortAvailable -Port $ApiPort
 
-    Write-Host "[grades-qa] creating database $databaseName"
+    Write-Host "[leave-qa] creating database $databaseName"
     Invoke-AdminSql "CREATE DATABASE [$databaseName]"
     $databaseCreated = $true
     $databaseDropped = $false
 
-    Write-Host "[grades-qa] applying migrations"
-    # dotnet ef reads configuration through the startup project's IConfiguration.
-    # Make ConnectionStrings__Default available so the design-time DbContext
-    # factory can resolve the application connection string.
+    Write-Host "[leave-qa] applying migrations"
     $env:ConnectionStrings__Default = $applicationConnectionString
     $env:ASPNETCORE_ENVIRONMENT = 'Development'
     & dotnet ef database update `
@@ -242,66 +226,58 @@ try {
         --configuration Release --no-build
     if ($LASTEXITCODE -ne 0) { throw "Migration failed with exit code $LASTEXITCODE." }
 
-    Write-Host "[grades-qa] starting API on port $ApiPort"
+    Write-Host "[leave-qa] starting API on port $ApiPort"
     $api = Start-IsolatedApiProcess -Port $ApiPort -LogPath $logsDirectory -ApplicationConnectionString $applicationConnectionString
-    Write-Host "[grades-qa] API ready, pid=$($api.Id)"
+    Write-Host "[leave-qa] API ready, pid=$($api.Id)"
 
-    Write-Host "[grades-qa] running grades-contract scenario"
+    Write-Host "[leave-qa] running leave-requests scenario"
     Push-Location (Join-Path $repositoryRoot 'qa\api')
     try {
         $env:QA_API_ORIGIN = "http://127.0.0.1:$ApiPort"
-        $npmLog = Join-Path $logsDirectory 'grades-contract.out.log'
-        $npmErrLog = Join-Path $logsDirectory 'grades-contract.err.log'
-        # Run the script directly so we capture node's own stack traces without
-        # npm's wrapper swallowing them. Quote the path explicitly so
-        # PowerShell does not interpret $npmLog as a destination stream.
-        # Copy logs to a stable temp location so we can inspect them after
-        # teardown nukes the artifact directory on failure.
-        $npmStableLog = Join-Path ([System.IO.Path]::GetTempPath()) "MyFSchool-QA-grades-$runId.log"
-        & node.exe 'tests\grades-contract.mjs' *> $npmLog 2> $npmErrLog
+        $npmLog = Join-Path $logsDirectory 'leave-requests.out.log'
+        # Redirect stdout/stderr explicitly. PowerShell's *> redirect
+        # collides with wildcard expansion, so use a Tee-Object fallback.
+        $outputLines = & node.exe 'tests\leave-requests.mjs' 2>&1
         $testExit = $LASTEXITCODE
+        Set-Content -LiteralPath $npmLog -Value $outputLines -ErrorAction SilentlyContinue
         if (Test-Path -LiteralPath $npmLog) {
-            Copy-Item -LiteralPath $npmLog -Destination $npmStableLog -Force
-            Get-Content -LiteralPath $npmLog -ErrorAction SilentlyContinue | Select-Object -Last 60 | ForEach-Object { Write-Host "[grades-qa]   $_" }
-        }
-        if (Test-Path -LiteralPath $npmErrLog) {
-            Get-Content -LiteralPath $npmErrLog -ErrorAction SilentlyContinue | Select-Object -Last 20 | ForEach-Object { Write-Host "[grades-qa]   ERR: $_" }
+            Get-Content -LiteralPath $npmLog -ErrorAction SilentlyContinue | Select-Object -Last 60 | ForEach-Object { Write-Host "[leave-qa]   $_" }
         }
     } finally {
         Pop-Location
     }
 
-    if ($testExit -ne 0) { throw "grades-contract scenario failed with exit code $testExit." }
-    Write-Host "[grades-qa] grades-contract passed in $([math]::Round(((Get-Date) - $startedAt).TotalSeconds, 2))s"
+    if ($testExit -ne 0) { throw "leave-requests scenario failed with exit code $testExit." }
+    Write-Host "[leave-qa] leave-requests passed in $([math]::Round(((Get-Date) - $startedAt).TotalSeconds, 2))s"
     $outcome = 'passed'
 }
 catch {
-    Write-Host "[grades-qa] FAILED: $($_.Exception.Message)"
+    Write-Host "[leave-qa] FAILED: $($_.Exception.Message)"
     $outcome = 'failed'
 }
 finally {
-    Write-Host "[grades-qa] tearing down API processes"
+    Write-Host "[leave-qa] tearing down API processes"
     Stop-OwnedApiProcesses
     if ($databaseCreated -and -not $KeepDatabase) {
         try {
-            Write-Host "[grades-qa] dropping database $databaseName"
+            Write-Host "[leave-qa] dropping database $databaseName"
             Invoke-AdminSql "ALTER DATABASE [$databaseName] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [$databaseName]"
             $databaseDropped = $true
         } catch {
-            Write-Host "[grades-qa] database drop failed: $($_.Exception.Message)"
+            Write-Host "[leave-qa] database drop failed: $($_.Exception.Message)"
         }
     }
     if (Test-Path -LiteralPath $storageRoot) {
         try {
             Remove-Item -LiteralPath $storageRoot -Recurse -Force -ErrorAction Stop
-            Write-Host "[grades-qa] removed storage root $storageRoot"
+            Write-Host "[leave-qa] removed storage root $storageRoot"
         } catch {
-            Write-Host "[grades-qa] storage root cleanup failed: $($_.Exception.Message)"
+            Write-Host "[leave-qa] storage root cleanup failed: $($_.Exception.Message)"
         }
     }
     Get-Job | Remove-Job -Force
     Restore-Env
-    Write-Host "[grades-qa] outcome=$outcome artifacts=$artifactDirectory"
+    Write-Host "[leave-qa] outcome=$outcome artifacts=$artifactDirectory"
 }
 
 if ($outcome -ne 'passed') { exit 1 } else { exit 0 }

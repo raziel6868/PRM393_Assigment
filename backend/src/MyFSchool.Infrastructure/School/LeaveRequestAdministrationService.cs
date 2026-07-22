@@ -26,6 +26,20 @@ public sealed class LeaveRequestAdministrationService(
         if (!await dbContext.StudentProfiles.AnyAsync(profile => profile.Id == command.StudentProfileId && profile.IsActive, cancellationToken))
             return OperationResult<LeaveRequestResult>.Failure("studentProfileNotFound");
 
+        // Authorization: the requester must be an active Parent linked to this Student.
+        var linkedParent = await dbContext.ParentProfiles
+            .Where(parent => parent.UserId == command.ActorUserId && parent.IsActive)
+            .Join(dbContext.ParentStudentLinks,
+                parent => parent.Id,
+                link => link.ParentProfileId,
+                (parent, link) => new { parent, link })
+            .Where(joined => joined.link.StudentProfileId == command.StudentProfileId
+                && joined.link.IsActive)
+            .Select(joined => joined.parent.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (linkedParent == Guid.Empty)
+            return OperationResult<LeaveRequestResult>.Failure("studentNotLinked");
+
         // Dedup: at most one Pending request per (StudentProfileId, StartDate, EndDate)
         var duplicateExists = await dbContext.LeaveRequests.AnyAsync(
             request => request.StudentProfileId == command.StudentProfileId

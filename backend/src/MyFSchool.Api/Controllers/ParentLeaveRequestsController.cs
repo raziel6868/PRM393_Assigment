@@ -9,23 +9,24 @@ using MyFSchool.Domain.School;
 namespace MyFSchool.Api.Controllers;
 
 [ApiController]
-[Authorize(Policy = SchoolPolicies.AuthenticatedSession)]
-[Route("api/v1/parents/me")]
+[Authorize(Policy = SchoolPolicies.Parent)]
+[Route("api/v1/leave-requests")]
 public sealed class ParentLeaveRequestsController(ILeaveRequestAdministrationService leaveService) : ControllerBase
 {
-    [HttpGet("leave-requests")]
+    [HttpGet]
     public async Task<IActionResult> List(
-        [FromQuery] int page,
-        [FromQuery] int pageSize,
         [FromQuery] Guid? studentProfileId,
-        CancellationToken cancellationToken)
+        [FromQuery] string? status,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
         var result = await leaveService.ListMineAsync(userId, studentProfileId, page, pageSize, cancellationToken);
         return PageResult(result);
     }
 
-    [HttpGet("leave-requests/{leaveRequestId:guid}")]
+    [HttpGet("{leaveRequestId:guid}")]
     public async Task<IActionResult> Detail(Guid leaveRequestId, CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -33,7 +34,7 @@ public sealed class ParentLeaveRequestsController(ILeaveRequestAdministrationSer
         return SingleResult(result, "leaveRequestNotFound");
     }
 
-    [HttpPost("leave-requests")]
+    [HttpPost]
     public async Task<IActionResult> Submit(SubmitLeaveRequestBody body, CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -51,7 +52,7 @@ public sealed class ParentLeaveRequestsController(ILeaveRequestAdministrationSer
         return CreatedResult(result);
     }
 
-    [HttpPost("leave-requests/{leaveRequestId:guid}/cancel")]
+    [HttpPost("{leaveRequestId:guid}/cancel")]
     public async Task<IActionResult> Cancel(Guid leaveRequestId, CancelLeaveRequestBody body, CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
@@ -97,6 +98,7 @@ public sealed class ParentLeaveRequestsController(ILeaveRequestAdministrationSer
         return result.ErrorCode switch
         {
             "studentProfileNotFound" => ProblemResponse(404, "studentProfileNotFound", "Không tìm thấy học sinh", "Hồ sơ học sinh không tồn tại."),
+            "studentNotLinked" => ProblemResponse(403, "studentNotLinked", "Không có quyền gửi đơn", "Bạn không phải phụ huynh của học sinh này."),
             "leaveRequestAlreadyPending" => ProblemResponse(409, "leaveRequestAlreadyPending", "Đã có đơn đang chờ", "Một đơn cho khoảng ngày này đang được xử lý."),
             "invalidDateRange" => ProblemResponse(400, "invalidDateRange", "Ngày không hợp lệ", "Ngày kết thúc phải sau hoặc bằng ngày bắt đầu."),
             "reasonLengthInvalid" => ProblemResponse(400, "reasonLengthInvalid", "Nội dung không hợp lệ", "Nội dung đơn phải từ 20 đến 500 ký tự."),

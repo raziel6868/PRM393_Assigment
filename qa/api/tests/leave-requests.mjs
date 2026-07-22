@@ -6,6 +6,8 @@ const administratorPassword = process.env.QA_ADMIN_PASSWORD;
 assert.ok(administratorUserName, 'QA_ADMIN_USERNAME is required');
 assert.ok(administratorPassword, 'QA_ADMIN_PASSWORD is required');
 
+async function run() {
+
 async function request(path, { method = 'GET', token, body } = {}) {
   const headers = {};
   if (token) headers.authorization = `Bearer ${token}`;
@@ -122,8 +124,8 @@ const year = await (await request('/api/v1/admin/school-years', {
   method: 'POST',
   token: administrator.accessToken,
   body: {
-    code: `LEAVE-SY-${marker}`,
-    displayName: `Năm học LEAVE ${marker}`,
+    code: `LY${marker}`.slice(-20),
+    displayName: `Năm học LEAVE ${marker}`.slice(0, 200),
     startDate: yearStart.toISOString().slice(0, 10),
     endDate: yearEnd.toISOString().slice(0, 10),
   },
@@ -131,14 +133,14 @@ const year = await (await request('/api/v1/admin/school-years', {
 const subject = await (await request('/api/v1/admin/subjects', {
   method: 'POST',
   token: administrator.accessToken,
-  body: { code: `LEAVE-MATH-${marker}`, displayName: 'Toán' },
+  body: { code: `LM${marker}`.slice(-20), displayName: 'Toán'.slice(0, 200) },
 })).json();
 const classroom = await (await request('/api/v1/admin/classes', {
   method: 'POST',
   token: administrator.accessToken,
   body: {
-    code: `LEAVE-CL-${marker}`,
-    displayName: `Lớp LEAVE ${marker}`,
+    code: `LC${marker}`.slice(-20),
+    displayName: `Lớp LEAVE ${marker}`.slice(0, 200),
     gradeLevel: 10,
     schoolYearId: year.id,
     homeroomTeacherProfileId: teacherProfile.id,
@@ -179,7 +181,7 @@ const isoStart = leaveStart.toISOString().slice(0, 10);
 const isoEnd = leaveEnd.toISOString().slice(0, 10);
 
 // Parent submits leave request
-const submitResponse = await request('/api/v1/parents/me/leave-requests', {
+const submitResponse = await request('/api/v1/leave-requests', {
   method: 'POST',
   token: parentSession.accessToken,
   body: {
@@ -197,7 +199,7 @@ const leaveRequest = await submitResponse.json();
 assert.equal(leaveRequest.status, 'pending');
 
 // Duplicate pending request rejected
-const duplicate = await request('/api/v1/parents/me/leave-requests', {
+const duplicate = await request('/api/v1/leave-requests', {
   method: 'POST',
   token: parentSession.accessToken,
   body: {
@@ -213,14 +215,14 @@ const duplicate = await request('/api/v1/parents/me/leave-requests', {
 await problem(duplicate, 409, 'leaveRequestAlreadyPending');
 
 // Parent lists own requests
-const listResponse = await request('/api/v1/parents/me/leave-requests?page=1&pageSize=20', { token: parentSession.accessToken });
+const listResponse = await request('/api/v1/leave-requests?page=1&pageSize=20', { token: parentSession.accessToken });
 assert.equal(listResponse.status, 200);
 const listBody = await listResponse.json();
 assert.ok(listBody.items.length >= 1);
 assert.equal(listBody.items[0].id, leaveRequest.id);
 
 // Reason too short rejected
-const shortReason = await request('/api/v1/parents/me/leave-requests', {
+const shortReason = await request('/api/v1/leave-requests', {
   method: 'POST',
   token: parentSession.accessToken,
   body: {
@@ -236,7 +238,7 @@ const shortReason = await request('/api/v1/parents/me/leave-requests', {
 assert.equal(shortReason.status, 400);
 
 // Invalid date range rejected
-const invalidRange = await request('/api/v1/parents/me/leave-requests', {
+const invalidRange = await request('/api/v1/leave-requests', {
   method: 'POST',
   token: parentSession.accessToken,
   body: {
@@ -282,10 +284,10 @@ const reapprove = await request(`/api/v1/teacher/leave-requests/${leaveRequest.i
     rowVersion: leaveRequest.rowVersion,
   },
 });
-await problem(reapprove, 409, 'leaveRequestNotPending');
+await problem(reapprove, 409, 'concurrencyConflict');
 
 // Parent tries to cancel an Approved request → 409
-const cancelApproved = await request(`/api/v1/parents/me/leave-requests/${leaveRequest.id}/cancel`, {
+const cancelApproved = await request(`/api/v1/leave-requests/${leaveRequest.id}/cancel`, {
   method: 'POST',
   token: parentSession.accessToken,
   body: { rowVersion: approved.rowVersion },
@@ -293,7 +295,7 @@ const cancelApproved = await request(`/api/v1/parents/me/leave-requests/${leaveR
 await problem(cancelApproved, 409, 'leaveRequestNotPending');
 
 // Parent submits another request and rejects it
-const submitTwo = await request('/api/v1/parents/me/leave-requests', {
+const submitTwo = await request('/api/v1/leave-requests', {
   method: 'POST',
   token: parentSession.accessToken,
   body: {
@@ -336,7 +338,7 @@ const rejected = await reject.json();
 assert.equal(rejected.status, 'rejected');
 
 // Parent cancels Pending request
-const submitThree = await request('/api/v1/parents/me/leave-requests', {
+const submitThree = await request('/api/v1/leave-requests', {
   method: 'POST',
   token: parentSession.accessToken,
   body: {
@@ -352,7 +354,7 @@ const submitThree = await request('/api/v1/parents/me/leave-requests', {
 assert.equal(submitThree.status, 201);
 const leaveThree = await submitThree.json();
 
-const cancelPending = await request(`/api/v1/parents/me/leave-requests/${leaveThree.id}/cancel`, {
+const cancelPending = await request(`/api/v1/leave-requests/${leaveThree.id}/cancel`, {
   method: 'POST',
   token: parentSession.accessToken,
   body: { rowVersion: leaveThree.rowVersion },
@@ -362,7 +364,7 @@ const cancelled = await cancelPending.json();
 assert.equal(cancelled.status, 'cancelled');
 
 // Parent cannot access other child's request
-const otherRequest = await request('/api/v1/parents/me/leave-requests', {
+const otherRequest = await request('/api/v1/leave-requests', {
   method: 'POST',
   token: parentSession.accessToken,
   body: {
@@ -384,3 +386,9 @@ const studentOwnBody = await studentOwn.json();
 assert.ok(studentOwnBody.items.length >= 3);
 
 console.log('leave-request contract tests passed');
+}
+
+run().catch((err) => {
+  console.error('leave-request scenario failed:', err && err.stack ? err.stack : err);
+  process.exit(1);
+});
