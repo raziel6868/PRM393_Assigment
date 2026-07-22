@@ -38,6 +38,7 @@ public sealed record GradePageResponse(
     int TotalPages);
 
 public sealed record GradeEntryItemResponse(
+    Guid GradeEntryId,
     Guid StudentProfileId,
     string StudentCode,
     string StudentDisplayName,

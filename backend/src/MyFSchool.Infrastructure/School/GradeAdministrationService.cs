@@ -11,6 +11,208 @@ public sealed class GradeAdministrationService(
     MyFSchoolDbContext dbContext,
     TimeProvider timeProvider) : IGradeAdministrationService
 {
+    public async Task<OperationResult<IReadOnlyList<SemesterInfo>>> GetSemestersAsync(
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        // Both the student themselves and the student's linked parents need to
+        // see the same semester list. Collect every StudentProfileId the caller
+        // is allowed to read for, then return the union of distinct
+        // (SchoolYearId, Semester) pairs that have published grade entries for
+        // those students. Returning an empty list for "no permission / no
+        // data" keeps the controller's 400-only contract intact; unknown
+        // callers do not get a 404.
+        var studentIds = await (
+            from profile in dbContext.StudentProfiles.AsNoTracking()
+            where profile.IsActive && profile.UserId == userId
+            select profile.Id
+        ).ToListAsync(cancellationToken);
+
+        if (studentIds.Count == 0)
+        {
+            var linkedIds = await (
+                from parent in dbContext.ParentProfiles.AsNoTracking()
+                join link in dbContext.ParentStudentLinks.AsNoTracking() on parent.Id equals link.ParentProfileId
+                where parent.IsActive && parent.UserId == userId && link.IsActive
+                select link.StudentProfileId
+            ).ToListAsync(cancellationToken);
+            studentIds.AddRange(linkedIds);
+        }
+
+        if (studentIds.Count == 0)
+            return OperationResult<IReadOnlyList<SemesterInfo>>.Success(Array.Empty<SemesterInfo>());
+
+        var semesters = await (
+            from entry in dbContext.GradeEntries.AsNoTracking()
+            join assessment in dbContext.Assessments.AsNoTracking() on entry.AssessmentId equals assessment.Id
+            join year in dbContext.SchoolYears.AsNoTracking() on assessment.SchoolYearId equals year.Id
+            where studentIds.Contains(entry.StudentProfileId)
+            orderby year.Code descending, assessment.Semester descending
+            select new { YearId = year.Id, YearCode = year.Code, YearStart = year.StartDate, YearEnd = year.EndDate, assessment.Semester }
+        )
+        .Distinct()
+        .ToListAsync(cancellationToken);
+
+        var result = semesters.Select(s => new SemesterInfo(
+            BuildSemesterKey(s.YearId, s.Semester),
+            s.Semester,
+            s.YearId,
+            s.YearCode,
+            s.YearStart,
+            s.YearEnd))
+        .ToList();
+
+        return OperationResult<IReadOnlyList<SemesterInfo>>.Success(result);
+    }
+
+    public async Task<OperationResult<GradeSummaryResult>> GetGradeSummaryAsync(
+        Guid userId,
+        string role,
+        string semesterKey,
+        CancellationToken cancellationToken)
+    {
+        if (!TryParseSemesterKey(semesterKey, out var schoolYearId, out var semesterNumber))
+            return OperationResult<GradeSummaryResult>.Failure("invalidSemesterKey");
+
+        var year = await dbContext.SchoolYears.AsNoTracking()
+            .FirstOrDefaultAsync(y => y.Id == schoolYearId, cancellationToken);
+        if (year is null)
+            return OperationResult<GradeSummaryResult>.Failure("semesterNotFound");
+
+        Guid? studentProfileId = null;
+        if (role == "student")
+        {
+            studentProfileId = await dbContext.StudentProfiles
+                .Where(p => p.UserId == userId && p.IsActive)
+                .Select(p => (Guid?)p.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+        else if (role == "parent")
+        {
+            studentProfileId = await (
+                from parent in dbContext.ParentProfiles.AsNoTracking()
+                join link in dbContext.ParentStudentLinks.AsNoTracking() on parent.Id equals link.ParentProfileId
+                where parent.UserId == userId && parent.IsActive && link.IsActive
+                orderby link.IsPrimaryContact descending
+                select link.StudentProfileId
+            ).FirstOrDefaultAsync(cancellationToken);
+        }
+
+        if (!studentProfileId.HasValue)
+            return OperationResult<GradeSummaryResult>.Failure("studentProfileNotFound");
+
+        var grades = await (
+            from entry in dbContext.GradeEntries.AsNoTracking()
+            join assessment in dbContext.Assessments.AsNoTracking() on entry.AssessmentId equals assessment.Id
+            join subject in dbContext.Subjects.AsNoTracking() on assessment.SubjectId equals subject.Id
+            where entry.StudentProfileId == studentProfileId.Value
+                && assessment.SchoolYearId == schoolYearId
+                && assessment.Semester == semesterNumber
+            select new { subject.Id, subject.DisplayName, entry.Score }
+        ).ToListAsync(cancellationToken);
+
+        var subjects = grades
+            .GroupBy(g => new { g.Id, g.DisplayName })
+            .Select(g => new SubjectGradeSummary(
+                g.Key.Id,
+                g.Key.DisplayName,
+                g.Where(x => x.Score.HasValue).Select(x => x.Score!.Value).DefaultIfEmpty(0).Average(),
+                g.Count()))
+            .ToList();
+
+        return OperationResult<GradeSummaryResult>.Success(new GradeSummaryResult(
+            semesterKey,
+            semesterNumber,
+            schoolYearId,
+            year.Code,
+            subjects));
+    }
+
+    public async Task<OperationResult<GradeDetailResult>> GetGradeDetailAsync(
+        Guid userId,
+        string role,
+        Guid gradeId,
+        CancellationToken cancellationToken)
+    {
+        var gradeEntry = await (
+            from entry in dbContext.GradeEntries.AsNoTracking()
+            join assessment in dbContext.Assessments.AsNoTracking() on entry.AssessmentId equals assessment.Id
+            join subject in dbContext.Subjects.AsNoTracking() on assessment.SubjectId equals subject.Id
+            join year in dbContext.SchoolYears.AsNoTracking() on assessment.SchoolYearId equals year.Id
+            join classroom in dbContext.ClassRooms.AsNoTracking() on assessment.ClassId equals classroom.Id
+            where entry.Id == gradeId
+            select new { entry, assessment, subject, year, classroom }
+        ).FirstOrDefaultAsync(cancellationToken);
+
+        if (gradeEntry is null)
+            return OperationResult<GradeDetailResult>.Failure("gradeNotFound");
+
+        Guid? studentProfileId = null;
+        if (role == "student")
+        {
+            studentProfileId = await dbContext.StudentProfiles
+                .Where(p => p.UserId == userId && p.IsActive)
+                .Select(p => (Guid?)p.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+        else if (role == "parent")
+        {
+            var linked = await (
+                from parent in dbContext.ParentProfiles.AsNoTracking()
+                join link in dbContext.ParentStudentLinks.AsNoTracking() on parent.Id equals link.ParentProfileId
+                where parent.UserId == userId && parent.IsActive && link.IsActive
+                select link.StudentProfileId
+            ).ToListAsync(cancellationToken);
+
+            if (!linked.Contains(gradeEntry.entry.StudentProfileId))
+                return OperationResult<GradeDetailResult>.Failure("studentNotLinked");
+            studentProfileId = gradeEntry.entry.StudentProfileId;
+        }
+        else if (role == "teacher")
+        {
+            // Teacher access is scoped through an active class/subject/school-year
+            // assignment against the assessment the grade belongs to. Admins never
+            // reach this method.
+            var isAssigned = await (
+                from teacher in dbContext.TeacherProfiles.AsNoTracking()
+                join assignment in dbContext.TeacherClassSubjectAssignments.AsNoTracking()
+                    on teacher.Id equals assignment.TeacherProfileId
+                where teacher.UserId == userId
+                    && teacher.IsActive
+                    && assignment.IsActive
+                    && assignment.ClassId == gradeEntry.assessment.ClassId
+                    && assignment.SubjectId == gradeEntry.assessment.SubjectId
+                    && assignment.SchoolYearId == gradeEntry.assessment.SchoolYearId
+                select assignment.Id
+            ).AnyAsync(cancellationToken);
+
+            if (!isAssigned)
+                return OperationResult<GradeDetailResult>.Failure("gradeNotFound");
+            studentProfileId = gradeEntry.entry.StudentProfileId;
+        }
+
+        if (!studentProfileId.HasValue || studentProfileId.Value != gradeEntry.entry.StudentProfileId)
+            return OperationResult<GradeDetailResult>.Failure("gradeNotFound");
+
+        return OperationResult<GradeDetailResult>.Success(new GradeDetailResult(
+            gradeEntry.entry.Id,
+            gradeEntry.assessment.Id,
+            gradeEntry.assessment.Code,
+            gradeEntry.assessment.DisplayName,
+            gradeEntry.assessment.AssessmentType,
+            gradeEntry.assessment.Semester,
+            gradeEntry.year.Id,
+            gradeEntry.year.Code,
+            gradeEntry.classroom.Id,
+            gradeEntry.classroom.Code,
+            gradeEntry.subject.Id,
+            gradeEntry.subject.DisplayName,
+            gradeEntry.entry.Score,
+            gradeEntry.assessment.MaxScore,
+            gradeEntry.entry.TeacherComment,
+            gradeEntry.entry.RecordedAtUtc));
+    }
+
     public async Task<OperationResult<GradePage>> GetStudentGradesAsync(
         Guid userId,
         Guid? schoolYearId,
@@ -175,7 +377,7 @@ public sealed class GradeAdministrationService(
             var studentEntries = students.Select(s =>
             {
                 existingEntries.TryGetValue((assessment.Id, s.Id), out var entry);
-                return new GradeEntryItem(s.Id, s.StudentCode, s.DisplayName, entry?.Score, entry?.Score);
+                return new GradeEntryItem(entry?.Id ?? Guid.Empty, s.Id, s.StudentCode, s.DisplayName, entry?.Score, entry?.Score);
             }).ToList();
             return new AssessmentRoster(assessment.Id, studentEntries, Convert.ToBase64String(assessment.RowVersion));
         }).ToList();
@@ -308,7 +510,7 @@ public sealed class GradeAdministrationService(
                 existing.RecordedAtUtc = timeProvider.GetUtcNow();
             }
 
-            results.Add(new GradeEntryItem(update.StudentProfileId, studentInfo.StudentCode,
+            results.Add(new GradeEntryItem(existing?.Id ?? Guid.Empty, update.StudentProfileId, studentInfo.StudentCode,
                 studentInfo.DisplayName, update.Score, update.Score));
         }
 
@@ -319,4 +521,27 @@ public sealed class GradeAdministrationService(
 
     private static bool RowVersionMatches(byte[] supplied, byte[] persisted) =>
         supplied.Length == persisted.Length && CryptographicOperations.FixedTimeEquals(supplied, persisted);
+
+    // Semester keys are deterministic opaque tokens of the form
+    // "{schoolYearId:N}-{semesterNumber}". They travel in URL segments, so the
+    // format stays inside ASCII and round-trips without lossy encoding. Any
+    // value that does not match this exact shape is rejected as
+    // invalidSemesterKey, which the controller surfaces as a 400 problem.
+    internal static string BuildSemesterKey(Guid schoolYearId, int semesterNumber) =>
+        $"{schoolYearId:N}-{semesterNumber}";
+
+    internal static bool TryParseSemesterKey(string semesterKey, out Guid schoolYearId, out int semesterNumber)
+    {
+        schoolYearId = Guid.Empty;
+        semesterNumber = 0;
+        if (string.IsNullOrWhiteSpace(semesterKey)) return false;
+        var separator = semesterKey.LastIndexOf('-');
+        if (separator <= 0 || separator >= semesterKey.Length - 1) return false;
+        var yearPart = semesterKey[..separator];
+        var semesterPart = semesterKey[(separator + 1)..];
+        if (!Guid.TryParseExact(yearPart, "N", out schoolYearId)) return false;
+        if (!int.TryParse(semesterPart, out semesterNumber)) return false;
+        if (semesterNumber < 1) return false;
+        return true;
+    }
 }

@@ -10,56 +10,70 @@ namespace MyFSchool.Api.Controllers;
 
 [ApiController]
 [Authorize(Policy = SchoolPolicies.AuthenticatedSession)]
+[Route("api/v1/grades")]
 public sealed class GradesController(IGradeAdministrationService gradeService) : ControllerBase
 {
-    [HttpGet("api/v1/students/me/grades")]
-    public async Task<IActionResult> GetStudentGrades(
-        [FromQuery] Guid? schoolYearId,
-        [FromQuery] int? semester,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20,
+    [HttpGet("semesters")]
+    public async Task<IActionResult> GetSemesters(
         CancellationToken cancellationToken = default)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
-        var result = await gradeService.GetStudentGradesAsync(userId, schoolYearId, semester, page, pageSize, cancellationToken);
+        var result = await gradeService.GetSemestersAsync(userId, cancellationToken);
         if (!result.IsSuccess)
-            return ProblemResponse(400, result.ErrorCode!, "Không thể tải điểm", "Vui lòng thử lại.");
-        return Ok(MapPage(result.Value!));
+            return ProblemResponse(400, result.ErrorCode!, "Không thể tải học kỳ", "Vui lòng thử lại.");
+        return Ok(result.Value);
     }
 
-    [HttpGet("api/v1/parents/me/children/{studentProfileId:guid}/grades")]
-    public async Task<IActionResult> GetChildGrades(
-        Guid studentProfileId,
-        [FromQuery] Guid? schoolYearId,
-        [FromQuery] int? semester,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20,
+    [HttpGet("summary/{semesterKey}")]
+    public async Task<IActionResult> GetGradeSummary(
+        string semesterKey,
         CancellationToken cancellationToken = default)
     {
         if (!TryGetUserId(out var userId)) return Unauthorized();
-        var result = await gradeService.GetParentChildGradesAsync(userId, studentProfileId, schoolYearId, semester, page, pageSize, cancellationToken);
+        if (string.IsNullOrWhiteSpace(semesterKey))
+            return BadRequest(new ProblemDetails { Status = 400, Title = "Khóa học kỳ không hợp lệ" });
+
+        var role = ResolveRole();
+        var result = await gradeService.GetGradeSummaryAsync(userId, role, semesterKey, cancellationToken);
         if (!result.IsSuccess)
         {
             if (result.ErrorCode == "studentNotLinked")
                 return ProblemResponse(403, "studentNotLinked", "Không có quyền xem", "Học sinh này không phải con của bạn.");
+            if (result.ErrorCode == "semesterNotFound")
+                return ProblemResponse(404, "semesterNotFound", "Không tìm thấy học kỳ", "Học kỳ không tồn tại.");
+            if (result.ErrorCode == "invalidSemesterKey")
+                return ProblemResponse(400, "invalidSemesterKey", "Khóa học kỳ không hợp lệ", "Vui lòng chọn lại học kỳ.");
             return ProblemResponse(400, result.ErrorCode!, "Không thể tải điểm", "Vui lòng thử lại.");
         }
-        return Ok(MapPage(result.Value!));
+        return Ok(result.Value);
     }
 
-    private static GradePageResponse MapPage(GradePage page) => new(
-        page.Items.Select(MapSummary).ToList(),
-        page.Page, page.PageSize, page.TotalCount, page.TotalPages);
+    [HttpGet("{gradeId:guid}")]
+    public async Task<IActionResult> GetGradeDetail(
+        Guid gradeId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetUserId(out var userId)) return Unauthorized();
+        var role = ResolveRole();
+        var result = await gradeService.GetGradeDetailAsync(userId, role, gradeId, cancellationToken);
+        if (!result.IsSuccess)
+        {
+            if (result.ErrorCode == "gradeNotFound")
+                return ProblemResponse(404, "gradeNotFound", "Không tìm thấy điểm", "Điểm không tồn tại hoặc bạn không có quyền xem.");
+            if (result.ErrorCode == "studentNotLinked")
+                return ProblemResponse(403, "studentNotLinked", "Không có quyền xem", "Học sinh này không phải con của bạn.");
+            return ProblemResponse(400, result.ErrorCode!, "Không thể tải chi tiết điểm", "Vui lòng thử lại.");
+        }
+        return Ok(result.Value);
+    }
 
-    private static StudentGradeSummaryResponse MapSummary(StudentGradeSummary s) => new(
-        s.SchoolYearId, s.SchoolYearCode, s.Semester, s.SubjectId, s.SubjectName,
-        s.AverageScore, s.GradeCount,
-        s.Grades.Select(MapGrade).ToList());
-
-    private static GradeResponse MapGrade(GradeResult g) => new(
-        g.Id, g.AssessmentId, g.AssessmentCode, g.AssessmentName, g.AssessmentType,
-        g.Semester, g.SchoolYearId, g.SchoolYearCode, g.ClassId, g.ClassCode,
-        g.SubjectId, g.SubjectName, g.Score, g.MaxScore, g.TeacherComment, g.RecordedAtUtc);
+    private string ResolveRole()
+    {
+        if (User.IsInRole("student")) return "student";
+        if (User.IsInRole("teacher")) return "teacher";
+        if (User.IsInRole("parent")) return "parent";
+        return "unknown";
+    }
 
     private bool TryGetUserId(out Guid userId) =>
         Guid.TryParse(User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value, out userId);
@@ -75,9 +89,10 @@ public sealed class GradesController(IGradeAdministrationService gradeService) :
 
 [ApiController]
 [Authorize(Policy = SchoolPolicies.Teacher)]
+[Route("api/v1/teacher")]
 public sealed class TeacherGradesController(IGradeAdministrationService gradeService) : ControllerBase
 {
-    [HttpGet("api/v1/teacher/classes/{classId:guid}/assessments")]
+    [HttpGet("classes/{classId:guid}/assessments")]
     public async Task<IActionResult> GetAssessmentRosters(
         Guid classId,
         [FromQuery] Guid? subjectId,
@@ -98,7 +113,7 @@ public sealed class TeacherGradesController(IGradeAdministrationService gradeSer
         return Ok(result.Value!.Select(MapRoster).ToList());
     }
 
-    [HttpPost("api/v1/teacher/assessments")]
+    [HttpPost("assessments")]
     public async Task<IActionResult> CreateAssessment(
         CreateAssessmentRequest request,
         CancellationToken cancellationToken)
@@ -125,7 +140,7 @@ public sealed class TeacherGradesController(IGradeAdministrationService gradeSer
         return Created($"/api/v1/teacher/assessments/{result.Value!.Id}", result.Value);
     }
 
-    [HttpPost("api/v1/teacher/assessments/{assessmentId:guid}/grade-entries")]
+    [HttpPost("assessments/{assessmentId:guid}/grade-entries")]
     public async Task<IActionResult> SaveGradeEntries(
         Guid assessmentId,
         SaveGradeEntriesRequest request,
@@ -162,7 +177,7 @@ public sealed class TeacherGradesController(IGradeAdministrationService gradeSer
     private static AssessmentRosterResponse MapRoster(AssessmentRoster r) => new(
         r.Id,
         r.Students.Select(s => new GradeEntryItemResponse(
-            s.StudentProfileId, s.StudentCode, s.StudentDisplayName,
+            s.GradeEntryId, s.StudentProfileId, s.StudentCode, s.StudentDisplayName,
             s.ExistingScore, s.NewScore)).ToList(),
         r.RowVersion);
 

@@ -10,6 +10,7 @@
     "identity-relationships": "node tests/identity-relationships.mjs",
     "school-reference": "node tests/school-reference.mjs",
     "attendance": "node tests/attendance.mjs",
-    "leave-requests": "node tests/leave-requests.mjs"
+    "leave-requests": "node tests/leave-requests.mjs",
+    "grades-contract": "node tests/grades-contract.mjs"
   }
 }

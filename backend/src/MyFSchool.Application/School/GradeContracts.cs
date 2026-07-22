@@ -38,6 +38,7 @@ public sealed record GradePage(
     int TotalPages);
 
 public sealed record GradeEntryItem(
+    Guid GradeEntryId,
     Guid StudentProfileId,
     string StudentCode,
     string StudentDisplayName,
@@ -96,8 +97,63 @@ public sealed record AssessmentRoster(
     IReadOnlyList<GradeEntryItem> Students,
     string RowVersion);
 
+public sealed record SemesterInfo(
+    string Id,
+    int SemesterNumber,
+    Guid SchoolYearId,
+    string SchoolYearCode,
+    DateOnly StartDate,
+    DateOnly EndDate);
+
+public sealed record GradeSummaryResult(
+    string SemesterId,
+    int Semester,
+    Guid SchoolYearId,
+    string SchoolYearCode,
+    IReadOnlyList<SubjectGradeSummary> Subjects);
+
+public sealed record SubjectGradeSummary(
+    Guid SubjectId,
+    string SubjectName,
+    decimal? AverageScore,
+    int GradeCount);
+
+public sealed record GradeDetailResult(
+    Guid GradeId,
+    Guid AssessmentId,
+    string AssessmentCode,
+    string AssessmentName,
+    string AssessmentType,
+    int Semester,
+    Guid SchoolYearId,
+    string SchoolYearCode,
+    Guid ClassId,
+    string ClassCode,
+    Guid SubjectId,
+    string SubjectName,
+    decimal? Score,
+    decimal MaxScore,
+    string? TeacherComment,
+    DateTimeOffset RecordedAtUtc);
+
 public interface IGradeAdministrationService
 {
+    Task<OperationResult<IReadOnlyList<SemesterInfo>>> GetSemestersAsync(
+        Guid userId,
+        CancellationToken cancellationToken);
+
+    Task<OperationResult<GradeSummaryResult>> GetGradeSummaryAsync(
+        Guid userId,
+        string role,
+        string semesterKey,
+        CancellationToken cancellationToken);
+
+    Task<OperationResult<GradeDetailResult>> GetGradeDetailAsync(
+        Guid userId,
+        string role,
+        Guid gradeId,
+        CancellationToken cancellationToken);
+
     Task<OperationResult<GradePage>> GetStudentGradesAsync(
         Guid userId,
         Guid? schoolYearId,
