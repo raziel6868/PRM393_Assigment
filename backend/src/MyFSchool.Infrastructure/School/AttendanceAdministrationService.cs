@@ -126,8 +126,9 @@ public sealed class AttendanceAdministrationService(
             }
             else
             {
-                if (!string.IsNullOrEmpty(entry.RowVersion)
-                    && Convert.FromBase64String(entry.RowVersion) is { Length: > 0 } supplied
+                if (string.IsNullOrEmpty(entry.RowVersion))
+                    return OperationResult<AttendanceSaveResult>.Failure("concurrencyConflict");
+                if (Convert.FromBase64String(entry.RowVersion) is { Length: > 0 } supplied
                     && !supplied.SequenceEqual(record.RowVersion))
                 {
                     return OperationResult<AttendanceSaveResult>.Failure("concurrencyConflict");

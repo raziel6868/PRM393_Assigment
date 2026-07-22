@@ -55,7 +55,7 @@ async function provision(token, marker, kind, roles) {
 }
 
 async function createProfile(token, kind, userId, marker) {
-  const code = `ATT-${kind.toUpperCase()}-${marker}`;
+  const code = `ATT-${kind.toUpperCase().slice(0, 4)}-${marker}`.slice(-20);
   const segments = {
     teacher: ['identity-profiles/teachers', 'employeeCode'],
     student: ['identity-profiles/students', 'studentCode'],
@@ -146,8 +146,8 @@ const year = await (await request('/api/v1/admin/school-years', {
   method: 'POST',
   token: administrator.accessToken,
   body: {
-    code: `ATT-SY-${marker}`,
-    displayName: `Năm học ATT ${marker}`,
+    code: `AS${marker}`.slice(-20),
+    displayName: `Năm học ATT ${marker}`.slice(0, 200),
     startDate: yearStart.toISOString().slice(0, 10),
     endDate: yearEnd.toISOString().slice(0, 10),
   },
@@ -155,14 +155,14 @@ const year = await (await request('/api/v1/admin/school-years', {
 const subject = await (await request('/api/v1/admin/subjects', {
   method: 'POST',
   token: administrator.accessToken,
-  body: { code: `ATT-MATH-${marker}`, displayName: 'Toán' },
+  body: { code: `AM${marker}`.slice(-20), displayName: 'Toán'.slice(0, 200) },
 })).json();
 const classroom = await (await request('/api/v1/admin/classes', {
   method: 'POST',
   token: administrator.accessToken,
   body: {
-    code: `ATT-CL-${marker}`,
-    displayName: `Lớp ATT ${marker}`,
+    code: `AC${marker}`.slice(-20),
+    displayName: `Lớp ATT ${marker}`.slice(0, 200),
     gradeLevel: 10,
     schoolYearId: year.id,
     homeroomTeacherProfileId: teacherProfile.id,
@@ -257,8 +257,8 @@ const staleSave = await request(
 await problem(staleSave, 409, 'concurrencyConflict');
 
 // Unassigned teacher cannot access class roster
-const otherTeacher = await provision(administrator.accessToken, `${marker}-other`, 'teacher', ['teacher']);
-const otherTeacherProfile = await createProfile(administrator.accessToken, 'teacher', otherTeacher.userId, `${marker}-other`);
+const otherTeacher = await provision(administrator.accessToken, `${marker}_o`, 'teacher', ['teacher']);
+const otherTeacherProfile = await createProfile(administrator.accessToken, 'teacher', otherTeacher.userId, `${marker}_o`);
 const otherTeacherPassword = await finalizePassword(otherTeacher.userName, otherTeacher.temporaryPassword, marker, 'OT');
 const otherTeacherSession = await signIn(otherTeacher.userName, otherTeacherPassword);
 const forbidden = await request(
@@ -284,8 +284,8 @@ const childHistoryBody = await childHistory.json();
 assert.ok(childHistoryBody.items.length >= 1);
 
 // Parent requesting another child → 403
-const otherStudentUser = await provision(administrator.accessToken, `${marker}-other`, 'student', ['student']);
-const otherStudentProfile = await createProfile(administrator.accessToken, 'student', otherStudentUser.userId, `${marker}-other`);
+const otherStudentUser = await provision(administrator.accessToken, `${marker}_o`, 'student', ['student']);
+const otherStudentProfile = await createProfile(administrator.accessToken, 'student', otherStudentUser.userId, `${marker}_o`);
 const parentForbidden = await request(
   `/api/v1/students/me/attendance-history?page=1&pageSize=20&studentProfileId=${otherStudentProfile.id}`,
   { token: parentSession.accessToken });
