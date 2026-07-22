@@ -33,6 +33,8 @@ public sealed class MyFSchoolDbContext(DbContextOptions<MyFSchoolDbContext> opti
 
     public DbSet<StudentEnrollment> StudentEnrollments => Set<StudentEnrollment>();
 
+    public DbSet<AttendanceRecord> AttendanceRecords => Set<AttendanceRecord>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -178,6 +180,22 @@ public sealed class MyFSchoolDbContext(DbContextOptions<MyFSchoolDbContext> opti
             entity.HasOne<StudentProfile>().WithMany().HasForeignKey(item => item.StudentProfileId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<ClassRoom>().WithMany().HasForeignKey(item => item.ClassId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<SchoolYear>().WithMany().HasForeignKey(item => item.SchoolYearId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<AttendanceRecord>(entity =>
+        {
+            entity.ToTable("AttendanceRecords");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.AttendanceDate).HasConversion(
+                value => value.ToDateTime(TimeOnly.MinValue),
+                value => DateOnly.FromDateTime(value));
+            entity.Property(item => item.Note).HasMaxLength(500);
+            entity.Property(item => item.RecordedAtUtc).HasPrecision(0);
+            entity.Property(item => item.RowVersion).IsRowVersion();
+            entity.HasIndex(item => new { item.StudentProfileId, item.ClassId, item.AttendanceDate, item.Session }).IsUnique();
+            entity.HasIndex(item => new { item.ClassId, item.AttendanceDate, item.Session });
+            entity.HasOne<StudentProfile>().WithMany().HasForeignKey(item => item.StudentProfileId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ClassRoom>().WithMany().HasForeignKey(item => item.ClassId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 

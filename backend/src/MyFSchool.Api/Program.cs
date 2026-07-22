@@ -138,6 +138,10 @@ builder.Services.AddAuthorization(options =>
         .RequireAuthenticatedUser()
         .RequireRole(SchoolRoles.ToWire(SchoolRoles.Parent))
         .RequireClaim("passwordChangeRequired", "false"));
+    options.AddPolicy(SchoolPolicies.Teacher, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireRole(SchoolRoles.ToWire(SchoolRoles.Teacher))
+        .RequireClaim("passwordChangeRequired", "false"));
 });
 builder.Services.AddRateLimiter(options =>
 {
