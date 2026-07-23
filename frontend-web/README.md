@@ -23,7 +23,7 @@ root, and the build will fail fast when `VITE_API_BASE_URL` is missing.
 
 ```dotenv
 # repository-root .env
-VITE_API_BASE_URL=http://localhost:5080/api/v1
+VITE_API_BASE_URL=http://localhost:5080
 ```
 
 `http://localhost:5173` (the Vite dev origin) must be present in the backend
