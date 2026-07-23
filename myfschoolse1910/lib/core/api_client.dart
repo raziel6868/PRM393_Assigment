@@ -95,6 +95,22 @@ class ApiClient {
     return await _storage.read(key: _accessTokenKey);
   }
 
+  Future<Response> getSession() async {
+    return await _dio.get('/auth/session');
+  }
+
+  Future<void> logout() async {
+    final refreshToken = await _storage.read(key: _refreshTokenKey);
+    try {
+      await _dio.post(
+        '/auth/logout',
+        data: {'clientType': 'mobile', 'refreshToken': refreshToken},
+      );
+    } finally {
+      await clearTokens();
+    }
+  }
+
   // Auth endpoints
   Future<Response> signIn(String emailOrUserName, String password) async {
     return await _dio.post(
@@ -147,14 +163,20 @@ class ApiClient {
   }
 
   // Schedule/Timetable endpoints
-  Future<Response> getWeeklyTimetable(DateTime weekStart) async {
+  Future<Response> getWeeklyTimetable(
+    DateTime weekStart, {
+    String? studentProfileId,
+  }) async {
     final date =
         '${weekStart.year.toString().padLeft(4, '0')}-'
         '${weekStart.month.toString().padLeft(2, '0')}-'
         '${weekStart.day.toString().padLeft(2, '0')}';
     return await _dio.get(
       '/schedule/weekly',
-      queryParameters: {'weekStart': date},
+      queryParameters: {
+        'weekStart': date,
+        if (studentProfileId != null) 'studentProfileId': studentProfileId,
+      },
     );
   }
 
@@ -190,6 +212,30 @@ class ApiClient {
     return await _dio.get('/leave-requests/$requestId');
   }
 
+  Future<Response> getStudentLeaveRequests({
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    return await _dio.get(
+      '/students/me/leave-requests',
+      queryParameters: {'page': page, 'pageSize': pageSize},
+    );
+  }
+
+  Future<Response> getTeacherLeaveRequests({
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    return await _dio.get(
+      '/teacher/leave-requests/queue',
+      queryParameters: {'page': page, 'pageSize': pageSize},
+    );
+  }
+
+  Future<Response> getTeacherLeaveRequestDetail(String requestId) async {
+    return await _dio.get('/teacher/leave-requests/$requestId');
+  }
+
   Future<Response> createLeaveRequest(Map<String, dynamic> data) async {
     return await _dio.post('/leave-requests', data: data);
   }
@@ -201,6 +247,68 @@ class ApiClient {
     return await _dio.post(
       '/leave-requests/$requestId/cancel',
       data: {'rowVersion': rowVersion},
+    );
+  }
+
+  Future<Response> decideLeaveRequest(
+    String requestId, {
+    required bool approve,
+    required String rowVersion,
+    String? decisionNote,
+  }) async {
+    return await _dio.post(
+      '/teacher/leave-requests/$requestId/decide',
+      data: {
+        'approve': approve,
+        'decisionNote': decisionNote,
+        'rowVersion': rowVersion,
+      },
+    );
+  }
+
+  Future<Response> getAttendanceHistory({
+    String? studentProfileId,
+    int page = 1,
+    int pageSize = 30,
+  }) async {
+    return await _dio.get(
+      '/students/me/attendance-history',
+      queryParameters: {
+        'page': page,
+        'pageSize': pageSize,
+        if (studentProfileId != null) 'studentProfileId': studentProfileId,
+      },
+    );
+  }
+
+  Future<Response> getTeacherAttendanceRoster(
+    String classId, {
+    required DateTime date,
+    required String session,
+  }) async {
+    final day =
+        '${date.year.toString().padLeft(4, '0')}-'
+        '${date.month.toString().padLeft(2, '0')}-'
+        '${date.day.toString().padLeft(2, '0')}';
+    return await _dio.get(
+      '/teacher/classes/$classId/attendance',
+      queryParameters: {'date': day, 'session': session},
+    );
+  }
+
+  Future<Response> saveTeacherAttendance(
+    String classId, {
+    required DateTime date,
+    required String session,
+    required List<Map<String, dynamic>> entries,
+  }) async {
+    final day =
+        '${date.year.toString().padLeft(4, '0')}-'
+        '${date.month.toString().padLeft(2, '0')}-'
+        '${date.day.toString().padLeft(2, '0')}';
+    return await _dio.post(
+      '/teacher/classes/$classId/attendance',
+      data: {'attendanceDate': day, 'session': session, 'entries': entries},
     );
   }
 

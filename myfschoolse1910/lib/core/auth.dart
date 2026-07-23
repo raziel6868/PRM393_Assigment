@@ -15,7 +15,7 @@ class Session {
   });
 
   UserRole get primaryRole => roles.isNotEmpty ? roles.first : UserRole.student;
-  
+
   bool get isTeacher => roles.contains(UserRole.teacher);
   bool get isParent => roles.contains(UserRole.parent);
   bool get isStudent => roles.contains(UserRole.student);
@@ -27,11 +27,7 @@ class AuthState {
   final bool isLoading;
   final String? error;
 
-  AuthState({
-    this.session,
-    this.isLoading = false,
-    this.error,
-  });
+  AuthState({this.session, this.isLoading = false, this.error});
 
   bool get isAuthenticated => session != null;
 }
@@ -47,18 +43,27 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final response = await _apiClient.signIn(emailOrUserName, password);
       if (response.statusCode == 200) {
         final data = response.data;
-        
+
         await _apiClient.saveTokens(
           accessToken: data['accessToken'],
           refreshToken: data['refreshToken'],
         );
 
         final roles = (data['roles'] as List)
-            .map((r) => UserRole.values.firstWhere(
-                  (e) => e.name.toLowerCase() == r.toString().toLowerCase(),
-                  orElse: () => UserRole.student,
-                ))
+            .map(
+              (value) => UserRole.values.cast<UserRole?>().firstWhere(
+                (role) =>
+                    role?.name.toLowerCase() == value.toString().toLowerCase(),
+                orElse: () => null,
+              ),
+            )
+            .whereType<UserRole>()
             .toList();
+        if (roles.isEmpty) {
+          state = AuthState(error: 'Tài khoản không được phép dùng ứng dụng.');
+          await _apiClient.clearTokens();
+          return false;
+        }
 
         state = AuthState(
           session: Session(
@@ -97,22 +102,56 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await logout();
       return true;
     } catch (e) {
-      state = AuthState(isLoading: false, session: state.session, error: e.toString());
+      state = AuthState(
+        isLoading: false,
+        session: state.session,
+        error: e.toString(),
+      );
       return false;
     }
   }
 
   Future<void> logout() async {
-    await _apiClient.clearTokens();
-    state = AuthState();
+    try {
+      await _apiClient.logout();
+    } finally {
+      state = AuthState();
+    }
   }
 
   Future<bool> tryRestoreSession() async {
     final token = await _apiClient.getAccessToken();
     if (token == null) return false;
-    // For simplicity, we'll just check if token exists
-    // In production, you might want to validate the token
-    return true;
+    try {
+      final response = await _apiClient.getSession();
+      final data = response.data as Map<String, dynamic>;
+      final roles = (data['roles'] as List)
+          .map(
+            (value) => UserRole.values.cast<UserRole?>().firstWhere(
+              (role) =>
+                  role?.name.toLowerCase() == value.toString().toLowerCase(),
+              orElse: () => null,
+            ),
+          )
+          .whereType<UserRole>()
+          .toList();
+      if (roles.isEmpty) {
+        await _apiClient.clearTokens();
+        return false;
+      }
+      state = AuthState(
+        session: Session(
+          displayName: data['displayName']?.toString() ?? '',
+          roles: roles,
+          passwordChangeRequired: data['passwordChangeRequired'] == true,
+        ),
+      );
+      return true;
+    } catch (_) {
+      await _apiClient.clearTokens();
+      state = AuthState();
+      return false;
+    }
   }
 
   void clearError() {
@@ -122,5 +161,5 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
 final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier(ref.watch(apiClientProvider));
+  return AuthNotifier(ref.watch(apiClientProvider))..tryRestoreSession();
 });
