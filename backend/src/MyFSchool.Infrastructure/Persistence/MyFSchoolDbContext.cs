@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using MyFSchool.Domain.Identity;
+using MyFSchool.Domain.Imports;
 using MyFSchool.Domain.School;
 using MyFSchool.Infrastructure.Identity;
 
@@ -54,6 +55,10 @@ public sealed class MyFSchoolDbContext(DbContextOptions<MyFSchoolDbContext> opti
     public DbSet<AnnouncementDelivery> AnnouncementDeliveries => Set<AnnouncementDelivery>();
 
     public DbSet<AnnouncementReadState> AnnouncementReadStates => Set<AnnouncementReadState>();
+
+    public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
+
+    public DbSet<ImportBatchRow> ImportBatchRows => Set<ImportBatchRow>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -341,6 +346,8 @@ public sealed class MyFSchoolDbContext(DbContextOptions<MyFSchoolDbContext> opti
             entity.HasIndex(item => item.IsPublished);
             entity.HasIndex(item => item.CreatedAtUtc);
             entity.HasOne<ClassRoom>().WithMany().HasForeignKey(item => item.TargetClassId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasMany(item => item.Deliveries).WithOne(item => item.FeedPost).HasForeignKey(item => item.FeedPostId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(item => item.ReadStates).WithOne(item => item.FeedPost).HasForeignKey(item => item.FeedPostId).OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<AnnouncementDelivery>(entity =>
@@ -351,7 +358,6 @@ public sealed class MyFSchoolDbContext(DbContextOptions<MyFSchoolDbContext> opti
             entity.Property(item => item.SentAtUtc).HasPrecision(0);
             entity.Property(item => item.FailureReason).HasMaxLength(500);
             entity.HasIndex(item => new { item.FeedPostId, item.RecipientUserId, item.Channel }).IsUnique();
-            entity.HasOne<FeedPost>().WithMany(p => p.Deliveries).HasForeignKey(item => item.FeedPostId).OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<AnnouncementReadState>(entity =>
@@ -360,7 +366,36 @@ public sealed class MyFSchoolDbContext(DbContextOptions<MyFSchoolDbContext> opti
             entity.HasKey(item => item.Id);
             entity.Property(item => item.ReadAtUtc).HasPrecision(0);
             entity.HasIndex(item => new { item.FeedPostId, item.UserId }).IsUnique();
-            entity.HasOne<FeedPost>().WithMany(p => p.ReadStates).HasForeignKey(item => item.FeedPostId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<ImportBatch>(entity =>
+        {
+            entity.ToTable("ImportBatches");
+            entity.HasKey(batch => batch.Id);
+            entity.Property(batch => batch.FileName).HasMaxLength(260).IsRequired();
+            entity.Property(batch => batch.OriginalFileSha256).HasMaxLength(64).IsRequired();
+            entity.Property(batch => batch.FailureReason).HasMaxLength(1000);
+            entity.Property(batch => batch.CreatedAtUtc).HasPrecision(0);
+            entity.Property(batch => batch.ValidatedAtUtc).HasPrecision(0);
+            entity.Property(batch => batch.CommittedAtUtc).HasPrecision(0);
+            entity.Property(batch => batch.RowVersion).IsRowVersion();
+            entity.HasIndex(batch => batch.OriginalFileSha256);
+            entity.HasIndex(batch => batch.CreatedByUserId);
+            entity.HasIndex(batch => batch.Status);
+            entity.HasOne<AppUser>().WithMany().HasForeignKey(batch => batch.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<ImportBatchRow>(entity =>
+        {
+            entity.ToTable("ImportBatchRows");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.SheetName).HasMaxLength(50).IsRequired();
+            entity.Property(row => row.ReferenceCode).HasMaxLength(100);
+            entity.Property(row => row.ErrorCode).HasMaxLength(64).IsRequired();
+            entity.Property(row => row.ErrorMessage).HasMaxLength(500).IsRequired();
+            entity.Property(row => row.ColumnName).HasMaxLength(50);
+            entity.HasIndex(row => new { row.BatchId, row.SheetName, row.SheetRowNumber });
+            entity.HasOne(row => row.Batch).WithMany(batch => batch.Rows).HasForeignKey(row => row.BatchId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 

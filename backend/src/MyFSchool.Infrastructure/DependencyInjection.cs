@@ -8,9 +8,11 @@ using System.Text;
 using MyFSchool.Application.Readiness;
 using MyFSchool.Application.Identity;
 using MyFSchool.Application.School;
+using MyFSchool.Application.Imports;
 using MyFSchool.Infrastructure.Configuration;
 using MyFSchool.Infrastructure.Readiness;
 using MyFSchool.Infrastructure.Identity;
+using MyFSchool.Infrastructure.Imports;
 using MyFSchool.Infrastructure.Persistence;
 using MyFSchool.Infrastructure.School;
 
@@ -113,6 +115,7 @@ public static class DependencyInjection
         services.AddScoped<IAnnouncementAdministrationService, AnnouncementAdministrationService>();
         services.AddScoped<IAnnouncementQueryService, AnnouncementQueryService>();
         services.AddScoped<IAnnouncementEmailSender, GmailSmtpAnnouncementEmailSender>();
+        services.AddScoped<IExcelImportService, ExcelImportService>();
 
         services
             .AddOptions<StorageOptions>()
