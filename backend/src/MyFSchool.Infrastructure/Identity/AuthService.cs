@@ -70,7 +70,13 @@ public sealed class AuthService(
         }
 
         EnsureSucceeded(await userManager.ResetAccessFailedCountAsync(user));
-        var roles = (await userManager.GetRolesAsync(user)).ToArray();
+        var accountRoles = (await userManager.GetRolesAsync(user)).ToArray();
+        var roles = ScopeRoles(accountRoles, command.ClientType);
+        if (roles.Count == 0)
+        {
+            await AddAuditAsync("clientAccessDenied", user.Id, user.Id, command.CorrelationId, cancellationToken);
+            return OperationResult<AuthSession>.Failure("clientAccessDenied");
+        }
         var passwordChangeRequired = user.MustChangePassword;
         var lifetime = TimeSpan.FromMinutes(
             passwordChangeRequired ? _authOptions.RestrictedTokenMinutes : _authOptions.AccessTokenMinutes);
@@ -86,7 +92,7 @@ public sealed class AuthService(
         DateTimeOffset? refreshExpiresAtUtc = null;
         if (!passwordChangeRequired)
         {
-            rawRefreshToken = CreateRawRefreshToken();
+            rawRefreshToken = CreateRawRefreshToken(command.ClientType);
             refreshExpiresAtUtc = nowUtc.AddDays(_authOptions.RefreshTokenDays);
             dbContext.RefreshTokens.Add(new RefreshToken
             {
@@ -117,6 +123,10 @@ public sealed class AuthService(
         CancellationToken cancellationToken)
     {
         var nowUtc = timeProvider.GetUtcNow();
+        if (!MatchesClientType(command.RefreshToken, command.ClientType))
+        {
+            return OperationResult<AuthSession>.Failure("invalidRefreshToken");
+        }
         var tokenHash = HashToken(command.RefreshToken);
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
             IsolationLevel.Serializable,
@@ -156,7 +166,24 @@ public sealed class AuthService(
             return OperationResult<AuthSession>.Failure("invalidRefreshToken");
         }
 
-        var newRawToken = CreateRawRefreshToken();
+        var accountRoles = (await userManager.GetRolesAsync(user)).ToArray();
+        var roles = ScopeRoles(accountRoles, command.ClientType);
+        if (roles.Count == 0)
+        {
+            await RevokeFamilyAsync(storedToken.FamilyId, nowUtc, "clientAccessDenied", cancellationToken);
+            await AddAuditAsync(
+                "clientAccessDenied",
+                storedToken.UserId,
+                storedToken.UserId,
+                command.CorrelationId,
+                cancellationToken,
+                false);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return OperationResult<AuthSession>.Failure("invalidRefreshToken");
+        }
+
+        var newRawToken = CreateRawRefreshToken(command.ClientType);
         var newHash = HashToken(newRawToken);
         var newExpiresAtUtc = nowUtc.AddDays(_authOptions.RefreshTokenDays);
         storedToken.RevokedAtUtc = nowUtc;
@@ -174,7 +201,6 @@ public sealed class AuthService(
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        var roles = (await userManager.GetRolesAsync(user)).ToArray();
         var accessToken = accessTokenIssuer.Issue(new AccessTokenDescriptor(
             user.Id,
             user.DisplayName,
@@ -315,11 +341,37 @@ public sealed class AuthService(
         }
     }
 
-    private static string CreateRawRefreshToken() =>
+    private static string CreateRawRefreshToken(AuthClientType clientType) =>
+        $"{ClientPrefix(clientType)}." +
         Convert.ToBase64String(RandomNumberGenerator.GetBytes(64))
             .TrimEnd('=')
             .Replace('+', '-')
             .Replace('/', '_');
+
+    private static bool MatchesClientType(string rawToken, AuthClientType clientType) =>
+        rawToken.StartsWith($"{ClientPrefix(clientType)}.", StringComparison.Ordinal);
+
+    private static string ClientPrefix(AuthClientType clientType) => clientType switch
+    {
+        AuthClientType.Web => "web",
+        AuthClientType.Mobile => "mobile",
+        _ => throw new ArgumentOutOfRangeException(nameof(clientType))
+    };
+
+    private static IReadOnlyList<string> ScopeRoles(
+        IEnumerable<string> roles,
+        AuthClientType clientType)
+    {
+        var supportedRoles = clientType switch
+        {
+            AuthClientType.Web => new[] { SchoolRoles.Administrator, SchoolRoles.Teacher },
+            AuthClientType.Mobile => new[] { SchoolRoles.Teacher, SchoolRoles.Parent, SchoolRoles.Student },
+            _ => []
+        };
+        return roles
+            .Where(role => supportedRoles.Contains(role, StringComparer.OrdinalIgnoreCase))
+            .ToArray();
+    }
 
     private static string HashToken(string rawToken) =>
         Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(rawToken)));

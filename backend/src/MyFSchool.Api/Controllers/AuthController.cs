@@ -39,11 +39,33 @@ public sealed class AuthController(
             HttpContext.TraceIdentifier), cancellationToken);
         if (!result.IsSuccess)
         {
+            if (result.ErrorCode == "clientAccessDenied")
+            {
+                ClearRefreshCookie();
+                return clientType == AuthClientType.Web
+                    ? ApiProblem(
+                        403,
+                        "clientAccessDenied",
+                        "Không thể truy cập cổng thông tin",
+                        "Tài khoản này không có quyền truy cập Web. Vui lòng sử dụng ứng dụng di động.")
+                    : ApiProblem(
+                        403,
+                        "clientAccessDenied",
+                        "Không thể truy cập ứng dụng",
+                        "Tài khoản này không có quyền truy cập ứng dụng di động.");
+            }
             return result.ErrorCode == "temporaryPasswordExpired"
                 ? ApiProblem(401, "temporaryPasswordExpired", "Mật khẩu tạm đã hết hạn", "Vui lòng liên hệ nhà trường để được hỗ trợ.")
                 : ApiProblem(401, "invalidCredentials", "Không thể đăng nhập", "Email, tên đăng nhập hoặc mật khẩu không đúng.");
         }
 
+        if (clientType == AuthClientType.Web &&
+            Request.Cookies[RefreshCookieName] is { Length: > 0 } existingRefreshToken)
+        {
+            await authService.LogoutAsync(
+                new LogoutCommand(existingRefreshToken, HttpContext.TraceIdentifier),
+                cancellationToken);
+        }
         return Ok(ToResponse(result.Value!, clientType));
     }
 
@@ -183,12 +205,19 @@ public sealed class AuthController(
             return ApiProblem(401, "unauthorized", "Chưa đăng nhập", "Vui lòng đăng nhập để tiếp tục.");
         }
         var session = await authService.GetSessionAsync(userId, cancellationToken);
-        return session is null
+        if (session is null)
+        {
+            return ApiProblem(401, "unauthorized", "Chưa đăng nhập", "Vui lòng đăng nhập để tiếp tục.");
+        }
+        var scopedRoles = session.Roles
+            .Where(role => User.IsInRole(SchoolRoles.ToWire(role)))
+            .ToArray();
+        return scopedRoles.Length == 0
             ? ApiProblem(401, "unauthorized", "Chưa đăng nhập", "Vui lòng đăng nhập để tiếp tục.")
             : Ok(new SessionContextResponse(
                 session.UserId,
                 session.DisplayName,
-                SchoolRoles.ToWire(session.Roles),
+                SchoolRoles.ToWire(scopedRoles),
                 session.PasswordChangeRequired));
     }
 
@@ -204,6 +233,10 @@ public sealed class AuthController(
                 Path = "/api/v1/auth",
                 Expires = session.RefreshTokenExpiresAtUtc
             });
+        }
+        else if (clientType == AuthClientType.Web)
+        {
+            ClearRefreshCookie();
         }
         return new AuthSessionResponse(
             session.UserId,
