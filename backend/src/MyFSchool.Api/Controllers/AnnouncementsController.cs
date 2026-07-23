@@ -1,11 +1,9 @@
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Identity;
 using MyFSchool.Api.Contracts.School;
 using MyFSchool.Application.Identity;
 using MyFSchool.Application.School;
-using MyFSchool.Infrastructure.Identity;
 using MyFSchool.Infrastructure.Persistence;
 
 namespace MyFSchool.Api.Controllers;
@@ -16,7 +14,6 @@ namespace MyFSchool.Api.Controllers;
 public class AnnouncementsController(
     IAnnouncementAdministrationService adminService,
     IAnnouncementQueryService queryService,
-    UserManager<AppUser> userManager,
     MyFSchoolDbContext db) : ControllerBase
 {
     private bool TryGetUserId(out Guid userId) =>
@@ -27,9 +24,10 @@ public class AnnouncementsController(
         if (!TryGetUserId(out var userId))
             return (Guid.Empty, "Student", null);
 
-        var user = await userManager.FindByIdAsync(userId.ToString());
-        var roles = await userManager.GetRolesAsync(user!);
-        var role = roles.FirstOrDefault() ?? "Student";
+        var role = User.IsInRole("administrator") ? "Administrator"
+            : User.IsInRole("teacher") ? "Teacher"
+            : User.IsInRole("parent") ? "Parent"
+            : "Student";
 
         Guid? profileId = null;
         if (role == "Teacher")
@@ -64,15 +62,16 @@ public class AnnouncementsController(
     {
         var (userId, role, profileId) = await GetUserContextAsync();
         var result = await queryService.GetDetailForUserAsync(id, userId, role, profileId, ct);
-        if (!result.IsSuccess)
+        if (!result.IsSuccess || result.Value is null)
             return ProblemResponse(404, result.ErrorCode!, "Khong tim thay", "Vui long thu lai.");
 
+        var announcement = result.Value;
         return Ok(new AnnouncementDetailDto(
-            result.Value.Id, result.Value.Title, result.Value.Body, result.Value.Audience,
-            result.Value.TargetClassName, result.Value.AuthorDisplayName,
-            result.Value.CreatedAtUtc, result.Value.PublishedAtUtc, result.Value.ImageUrl,
-            result.Value.ReadCount, result.Value.TotalRecipientCount,
-            Convert.ToBase64String(result.Value.RowVersion)));
+            announcement.Id, announcement.Title, announcement.Body, announcement.Audience,
+            announcement.TargetClassName, announcement.AuthorDisplayName,
+            announcement.CreatedAtUtc, announcement.PublishedAtUtc, announcement.ImageUrl,
+            announcement.ReadCount, announcement.TotalRecipientCount,
+            Convert.ToBase64String(announcement.RowVersion)));
     }
 
     [HttpPost("{id:guid}/read")]
@@ -94,7 +93,7 @@ public class AnnouncementsController(
     }
 
     [HttpPost]
-    [Authorize(Roles = "Administrator,Teacher")]
+    [Authorize(Roles = "administrator,teacher")]
     public async Task<IActionResult> CreateAnnouncement(
         [FromBody] CreateAnnouncementRequest request,
         CancellationToken ct = default)
@@ -109,19 +108,20 @@ public class AnnouncementsController(
             request.title, request.body, request.audience, request.targetClassId, request.imageUrl);
 
         var result = await adminService.CreateAsync(command, userId, ct);
-        if (!result.IsSuccess)
+        if (!result.IsSuccess || result.Value is null)
             return ProblemResponse(400, result.ErrorCode!, "Loi", "Vui long thu lai.");
 
-        return Created($"/api/v1/announcements/{result.Value.Id}", new AnnouncementDetailDto(
-            result.Value.Id, result.Value.Title, result.Value.Body, result.Value.Audience,
-            result.Value.TargetClassName, result.Value.AuthorDisplayName,
-            result.Value.CreatedAtUtc, result.Value.PublishedAtUtc, result.Value.ImageUrl,
-            result.Value.ReadCount, result.Value.TotalRecipientCount,
-            Convert.ToBase64String(result.Value.RowVersion)));
+        var announcement = result.Value;
+        return Created($"/api/v1/announcements/{announcement.Id}", new AnnouncementDetailDto(
+            announcement.Id, announcement.Title, announcement.Body, announcement.Audience,
+            announcement.TargetClassName, announcement.AuthorDisplayName,
+            announcement.CreatedAtUtc, announcement.PublishedAtUtc, announcement.ImageUrl,
+            announcement.ReadCount, announcement.TotalRecipientCount,
+            Convert.ToBase64String(announcement.RowVersion)));
     }
 
     [HttpPost("{id:guid}/publish")]
-    [Authorize(Roles = "Administrator,Teacher")]
+    [Authorize(Roles = "administrator,teacher")]
     public async Task<IActionResult> PublishAnnouncement(
         Guid id,
         [FromBody] PublishAnnouncementRequest request,
@@ -132,7 +132,15 @@ public class AnnouncementsController(
         if (request.deliveryChannels == null || request.deliveryChannels.Count == 0)
             return ProblemResponse(400, "noChannels", "Loi", "Can chon it nhat mot kenh gui.");
 
-        var rowVersion = Convert.FromBase64String(request.rowVersion);
+        byte[] rowVersion;
+        try
+        {
+            rowVersion = Convert.FromBase64String(request.rowVersion);
+        }
+        catch (FormatException)
+        {
+            return ProblemResponse(400, "invalidRowVersion", "Lỗi dữ liệu", "Phiên bản thông báo không hợp lệ.");
+        }
         var command = new PublishAnnouncementCommand(
             id, request.deliveryChannels.Select(c => new DeliveryChannelInfo(c.channel)).ToList(), rowVersion);
 

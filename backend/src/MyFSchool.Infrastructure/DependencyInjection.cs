@@ -66,6 +66,22 @@ public static class DependencyInjection
                 "Bootstrap Administrator settings are required when Bootstrap__Enabled is true")
             .ValidateOnStart();
         services
+            .AddOptions<SmtpOptions>()
+            .Bind(configuration.GetSection(SmtpOptions.SectionName))
+            .Validate(
+                options => !options.Enabled ||
+                    (!string.IsNullOrWhiteSpace(options.Host) &&
+                     options.Port is > 0 and <= 65535 &&
+                     !string.IsNullOrWhiteSpace(options.UserName) &&
+                     !string.IsNullOrWhiteSpace(options.Password) &&
+                     !string.IsNullOrWhiteSpace(options.FromEmail)),
+                "Gmail SMTP settings are required when Smtp__Enabled is true")
+            .Validate(
+                options => !options.Enabled ||
+                    string.Equals(options.Security, "startTls", StringComparison.OrdinalIgnoreCase),
+                "Smtp__Security must be startTls")
+            .ValidateOnStart();
+        services
             .AddIdentityCore<AppUser>(options =>
             {
                 options.Password.RequiredLength = 12;
@@ -96,6 +112,7 @@ public static class DependencyInjection
         services.AddScoped<IEventQueryService, EventQueryService>();
         services.AddScoped<IAnnouncementAdministrationService, AnnouncementAdministrationService>();
         services.AddScoped<IAnnouncementQueryService, AnnouncementQueryService>();
+        services.AddScoped<IAnnouncementEmailSender, GmailSmtpAnnouncementEmailSender>();
 
         services
             .AddOptions<StorageOptions>()
