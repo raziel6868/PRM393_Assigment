@@ -54,7 +54,7 @@ export function DashboardPage(): JSX.Element {
         </Typography.Title>
         <Typography.Paragraph>
           {isTeacherOnly
-            ? 'Bạn đang đăng nhập với vai trò giáo viên. Truy cập cổng quản trị bằng ứng dụng di động để thao tác chấm điểm danh, duyệt đơn nghỉ và các chức năng hằng ngày.'
+            ? 'Bạn đang đăng nhập với vai trò giáo viên. Hãy sử dụng ứng dụng di động để điểm danh, duyệt đơn nghỉ và thực hiện các công việc hằng ngày.'
             : 'Chào mừng bạn đến với cổng quản trị MyFSchool. Chọn thao tác bên dưới để tiếp tục.'}
         </Typography.Paragraph>
       </Card>

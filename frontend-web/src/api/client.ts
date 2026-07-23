@@ -1,36 +1,24 @@
 import { ApiError, ProblemDetails } from './errors';
 import type { SchoolRole } from '../shared/config';
 
-const ACCESS_TOKEN_STORAGE_KEY = 'myfschool.web.access';
-
-type AccessTokenProvider = () => string | null;
-type AccessTokenSink = (token: string | null) => void;
 type LogoutHandler = () => Promise<void> | void;
 
-let accessTokenGetter: AccessTokenProvider = () => sessionStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-let accessTokenSetter: AccessTokenSink = (token) => {
-  if (token === null) sessionStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
-  else sessionStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, token);
-};
+let accessToken: string | null = null;
 let logoutHandler: LogoutHandler = () => {
-  sessionStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+  accessToken = null;
 };
-
-export function configureAccessToken(provider: AccessTokenProvider, sink: AccessTokenSink): void {
-  accessTokenGetter = provider;
-  accessTokenSetter = sink;
-}
+let refreshPromise: Promise<boolean> | null = null;
 
 export function registerLogoutHandler(handler: LogoutHandler): void {
   logoutHandler = handler;
 }
 
 export function setAccessToken(token: string | null): void {
-  accessTokenSetter(token);
+  accessToken = token;
 }
 
 export function getAccessToken(): string | null {
-  return accessTokenGetter();
+  return accessToken;
 }
 
 export type ApiRequestOptions = {
@@ -61,7 +49,7 @@ async function readProblem(response: Response): Promise<ProblemDetails> {
   }
 }
 
-async function attemptRefresh(): Promise<boolean> {
+async function performRefresh(): Promise<boolean> {
   try {
     const response = await fetch(buildUrl('/api/v1/auth/refresh'), {
       method: 'POST',
@@ -75,6 +63,28 @@ async function attemptRefresh(): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+function attemptRefresh(): Promise<boolean> {
+  if (refreshPromise === null) {
+    refreshPromise = performRefresh().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
+async function clearRefreshSession(): Promise<void> {
+  try {
+    await fetch(buildUrl('/api/v1/auth/logout'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ clientType: 'web' }),
+    });
+  } catch {
+    // Local state is still cleared when the server is unreachable.
   }
 }
 
@@ -115,7 +125,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
       payload = formData;
     }
     if (!skipAuth) {
-      const token = accessTokenGetter();
+      const token = getAccessToken();
       if (token) requestHeaders['authorization'] = `Bearer ${token}`;
     }
     requestHeaders['accept'] = 'application/json';
@@ -140,6 +150,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
 
   if (!response.ok) {
     if (response.status === 401 && !skipAuth) {
+      await clearRefreshSession();
       await logoutHandler();
     }
     const problem = await readProblem(response);
@@ -155,7 +166,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
 
 export async function apiDownload(path: string, suggestedFileName: string): Promise<void> {
   const headers: Record<string, string> = {};
-  const token = accessTokenGetter();
+  const token = getAccessToken();
   if (token) headers['authorization'] = `Bearer ${token}`;
   const response = await fetch(buildUrl(path), {
     method: 'GET',

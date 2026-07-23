@@ -54,6 +54,7 @@ export const authApi = {
     return apiRequest<AuthSessionResponse>('/api/v1/auth/refresh', {
       method: 'POST',
       body: { clientType: 'web' },
+      skipAuth: true,
     });
   },
 };

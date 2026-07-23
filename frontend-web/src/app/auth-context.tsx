@@ -14,8 +14,8 @@ import {
   type SignInRequest,
 } from '../api/auth';
 import {
-  configureAccessToken,
   getAccessToken,
+  registerLogoutHandler,
   setAccessToken,
   type AuthSessionResponse,
 } from '../api/client';
@@ -42,8 +42,6 @@ type AuthContextValue = {
   refresh: () => Promise<void>;
   changeTemporaryPassword: (input: ChangeTemporaryPasswordRequest) => Promise<void>;
 };
-
-const ACCESS_TOKEN_KEY = 'myfschool.web.access';
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -87,15 +85,10 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
   }, [applySession, clearSession]);
 
   useEffect(() => {
-    configureAccessToken(
-      () => sessionStorage.getItem(ACCESS_TOKEN_KEY),
-      (token) => {
-        if (token === null) sessionStorage.removeItem(ACCESS_TOKEN_KEY);
-        else sessionStorage.setItem(ACCESS_TOKEN_KEY, token);
-      },
-    );
+    registerLogoutHandler(clearSession);
     void restore();
-  }, [restore]);
+    return () => registerLogoutHandler(() => setAccessToken(null));
+  }, [clearSession, restore]);
 
   const signIn = useCallback<AuthContextValue['signIn']>(
     async (input) => {
