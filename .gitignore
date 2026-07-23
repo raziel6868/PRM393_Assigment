@@ -6,10 +6,12 @@
 # .NET
 **/bin/
 **/obj/
+.vs/
 *.user
 
 # Node/Vite
 **/node_modules/
+*.tsbuildinfo
 frontend-web/dist/
 
 # Flutter
@@ -19,8 +21,12 @@ myfschoolse1910/build/
 # QA generated state
 qa/.env.e2e.generated
 qa/artifacts/
+qa/.logs/
 qa/**/test-results/
 qa/**/playwright-report/
+qa/**/*.xlsx
+qa/**/*.zip
+qa/**/*.exe
 
 # Editors and operating systems
 .idea/
