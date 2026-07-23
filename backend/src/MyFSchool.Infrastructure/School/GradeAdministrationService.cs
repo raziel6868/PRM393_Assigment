@@ -108,16 +108,27 @@ public sealed class GradeAdministrationService(
             where entry.StudentProfileId == studentProfileId.Value
                 && assessment.SchoolYearId == schoolYearId
                 && assessment.Semester == semesterNumber
-            select new { subject.Id, subject.DisplayName, entry.Score }
+            select new
+            {
+                SubjectId = subject.Id,
+                SubjectName = subject.DisplayName,
+                GradeId = entry.Id,
+                AssessmentName = assessment.DisplayName,
+                entry.Score
+            }
         ).ToListAsync(cancellationToken);
 
         var subjects = grades
-            .GroupBy(g => new { g.Id, g.DisplayName })
+            .GroupBy(g => new { g.SubjectId, g.SubjectName })
             .Select(g => new SubjectGradeSummary(
-                g.Key.Id,
-                g.Key.DisplayName,
+                g.Key.SubjectId,
+                g.Key.SubjectName,
                 g.Where(x => x.Score.HasValue).Select(x => x.Score!.Value).DefaultIfEmpty(0).Average(),
-                g.Count()))
+                g.Count(),
+                g.Select(x => new GradeSummaryEntry(
+                    x.GradeId,
+                    x.AssessmentName,
+                    x.Score)).ToList()))
             .ToList();
 
         return OperationResult<GradeSummaryResult>.Success(new GradeSummaryResult(

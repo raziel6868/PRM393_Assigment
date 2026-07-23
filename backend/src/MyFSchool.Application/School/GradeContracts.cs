@@ -116,7 +116,13 @@ public sealed record SubjectGradeSummary(
     Guid SubjectId,
     string SubjectName,
     decimal? AverageScore,
-    int GradeCount);
+    int GradeCount,
+    IReadOnlyList<GradeSummaryEntry> Grades);
+
+public sealed record GradeSummaryEntry(
+    Guid GradeId,
+    string AssessmentName,
+    decimal? Score);
 
 public sealed record GradeDetailResult(
     Guid GradeId,
