@@ -1,0 +1,14 @@
+{
+  "name": "myfschool-web-qa",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "web-auth": "playwright test --grep @web-auth",
+    "web-password-help": "playwright test --grep @web-password-help",
+    "web-imports": "playwright test --grep @web-imports",
+    "web-full": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1"
+  }
+}
