@@ -8,6 +8,8 @@ import { ChangeTemporaryPasswordPage } from '../features/auth/change-temporary-p
 import { DashboardPage } from '../features/dashboard/dashboard-page';
 import { PasswordHelpRequestsPage } from '../features/password-help/password-help-requests-page';
 import { ImportsPage } from '../features/imports/imports-page';
+import { AnnouncementsPage } from '../features/announcements/announcements-page';
+import { AnnouncementComposePage } from '../features/announcements/announcement-compose-page';
 
 const router = createBrowserRouter([
   {
@@ -20,6 +22,22 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/dashboard" replace /> },
       { path: 'dashboard', element: <DashboardPage /> },
+      {
+        path: 'announcements',
+        element: (
+          <RoleGuard roles={['administrator', 'teacher']}>
+            <AnnouncementsPage />
+          </RoleGuard>
+        ),
+      },
+      {
+        path: 'announcements/new',
+        element: (
+          <RoleGuard roles={['administrator', 'teacher']}>
+            <AnnouncementComposePage />
+          </RoleGuard>
+        ),
+      },
       {
         path: 'password-help-requests',
         element: (

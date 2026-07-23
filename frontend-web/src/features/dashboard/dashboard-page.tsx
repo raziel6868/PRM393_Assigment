@@ -1,6 +1,6 @@
 import { Button, Card, Empty, Space, Typography } from 'antd';
 import { Link, useNavigate } from 'react-router-dom';
-import { KeyOutlined, FileExcelOutlined, LogoutOutlined } from '@ant-design/icons';
+import { KeyOutlined, FileExcelOutlined, LogoutOutlined, MailOutlined } from '@ant-design/icons';
 import { useAuth } from '../../app/auth-context';
 import { brandOrange, brandOrangeDark } from '../../shared/theme';
 
@@ -13,6 +13,13 @@ type ActionCard = {
 };
 
 const actions: readonly ActionCard[] = [
+  {
+    to: '/announcements',
+    icon: <MailOutlined />,
+    title: 'Thông báo & Email',
+    description: 'Soạn và gửi thông báo tới đúng đối tượng được phép.',
+    roles: ['administrator', 'teacher'],
+  },
   {
     to: '/password-help-requests',
     icon: <KeyOutlined />,

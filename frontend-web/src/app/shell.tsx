@@ -7,6 +7,7 @@ import {
   FileExcelOutlined,
   LogoutOutlined,
   UserOutlined,
+  MailOutlined,
 } from '@ant-design/icons';
 import { antdTheme, appName, brandOrange, brandOrangeDark, brandOrangeTint } from '../shared/theme';
 import { useAuth } from './auth-context';
@@ -17,6 +18,7 @@ type NavEntry = { key: string; path: string; label: string; icon: JSX.Element; r
 
 const navEntries: readonly NavEntry[] = [
   { key: 'dashboard', path: '/dashboard', label: 'Tổng quan', icon: <DashboardOutlined />, roles: ['administrator', 'teacher'] },
+  { key: 'announcements', path: '/announcements', label: 'Thông báo & Email', icon: <MailOutlined />, roles: ['administrator', 'teacher'] },
   { key: 'password-help-requests', path: '/password-help-requests', label: 'Yêu cầu hỗ trợ mật khẩu', icon: <KeyOutlined />, roles: ['administrator'] },
   { key: 'imports', path: '/imports', label: 'Nhập liệu Excel', icon: <FileExcelOutlined />, roles: ['administrator'] },
 ];
