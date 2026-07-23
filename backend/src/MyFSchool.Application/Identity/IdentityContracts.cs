@@ -125,3 +125,13 @@ public sealed record OperationResult<T>(T? Value, string? ErrorCode)
 
     public static OperationResult<T> Failure(string errorCode) => new(default, errorCode);
 }
+
+public sealed record OperationResult
+{
+    public string? ErrorCode { get; init; }
+    public bool IsSuccess => ErrorCode is null;
+
+    public static OperationResult Ok() => new() { ErrorCode = null };
+    public static OperationResult Fail(string errorCode) =>
+        new() { ErrorCode = errorCode };
+}
