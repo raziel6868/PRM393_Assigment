@@ -24,7 +24,7 @@ Never let a screenshot, sample name/count/date, inferred behavior, or lower-prio
 - The education actors are Teacher, Parent/Guardian, and Student. Administrator is a back-office authorization role.
 - Accounts are school-provisioned; there is no public registration or trusted pre-login role selection.
 - All visible product content is Vietnamese. Code identifiers/comments and technical documentation are English.
-- P0 and P1 are both Required. Only P2/Deferred work may be omitted without an explicit reprioritization.
+- P0 is the assignment-critical, demo-complete baseline and is Required. P1 contains valuable product extensions to implement only after P0 is green; it is not a prerequisite for the assignment baseline. P2/Deferred work is outside the planned initial delivery unless explicitly promoted.
 - API authorization is authoritative. UI hiding, route guards, or possession of an ID never grants resource access.
 - Web and Flutter never connect to each other or to SQL Server directly. Both consume the ASP.NET Core API; only Backend infrastructure accesses SQL Server, SMTP, and attachment storage.
 - Local development has one manually maintained repository-root `.env`. It is an input to launch/build tooling, not a file to copy wholesale into client bundles. Only explicitly allowlisted public values reach React or Flutter; Backend-only secrets remain server-side.
@@ -33,7 +33,7 @@ Never let a screenshot, sample name/count/date, inferred behavior, or lower-prio
 
 ### 0.3. Mandatory Slice Contract
 
-Before editing, write a concise slice contract in the working update/plan:
+Before editing, select the verification tier in Section 14.4.3 and write a slice contract in the working update/plan. A `Small` slice records only Goal, In/Out of scope, affected products, acceptance/consistency checks, baseline ownership, and commands. A `Standard` or `Critical` slice completes the full template below; use `Not applicable` with a reason instead of inventing work for an unaffected product:
 
 ```text
 Goal:
@@ -46,6 +46,7 @@ Required UI states: loading | loaded | empty | validation | forbidden | offline/
 Acceptance checks: numbered Given/When/Then outcomes including persistence and at least one forbidden/invalid path
 Test-first evidence: smallest RED scenario, expected behavioral failure, or a recorded allowed exception
 QA scenarios and phase gate:
+Verification tier: Small | Standard | Critical, with reason from Section 14.4.3
 Review plan: specification-compliance pass, then code-quality/security pass; independent reviewer or recorded self-review fallback
 Baseline: branch/HEAD when available, pre-existing modified/untracked files, active QA run/checkpoint
 Commit plan: feature branch plus intended atomic commits in dependency/review order
@@ -57,8 +58,8 @@ Then execute one vertical slice in this order:
 2. Reuse compatible work and record assumptions; do not overwrite unrelated user changes.
 3. Define or update domain rules and the public API contract before client wiring when server behavior changes.
 4. For a non-trivial slice, write and challenge the exact-file implementation plan in Section 14.7.1.
-5. Establish the smallest valid RED acceptance scenario in Section 14.7.2 before production behavior, then implement Backend persistence/authorization/API, typed Web/Flutter consumers, and requested UI states one acceptance unit at a time.
-6. Run the targeted autonomous loop, two-stage reviews, and atomic commits in Section 14.7 plus the change-impact gate in Section 14.4.2.
+5. Establish the smallest valid RED acceptance scenario in Section 14.7.2 before new production behavior, or record an allowed exception, then implement Backend persistence/authorization/API, actual typed consumers, and requested UI states one acceptance unit at a time.
+6. Run the tier-appropriate autonomous loop and review in Section 14.7 plus the change-impact gate in Section 14.4.2. Create atomic commits only when Section 2.3 grants commit authorization.
 7. Compare implemented UI with the approved mockup when one exists, document justified deviations, and complete Section 16.
 
 Do not create broad scaffolding, unrelated abstractions, or later-phase features merely because they might be useful. A bounded UI-only task does not authorize an API redesign; an API-contract task does require affected client updates.
@@ -91,6 +92,8 @@ Do not create broad scaffolding, unrelated abstractions, or later-phase features
 - Disposable QA, cross-client E2E, autonomous loop, and release cleanup: Section 14.
 - Phase order/gates and completion evidence: Sections 15-16.
 
+Section 3.1.2 is canonical for priority; Sections 1.1 and 4.7 are canonical for actor-client ownership; Sections 3.1.1 and 6.5 own Mobile and Web route scope. Detailed functional, UX, domain, QA, or roadmap text specifies the depth of an already active capability and cannot silently promote it. On the first task in a fresh context and on any requirements/roadmap edit, read this file completely. On a later bounded implementation task, always reload Sections 0, 1.1, 3, 4.7, and 16 plus every task-specific section identified by this map; do not spend the working context re-reading unrelated feature detail unless a cross-reference or conflict requires it.
+
 ## 1. Product Definition
 
 `myfschoolse1910` is a school communication and learning-management system inspired by eNetViet. It is not intended to copy eNetViet feature-for-feature. The product serves three primary education actors:
@@ -110,6 +113,23 @@ The target solution and fixed product directories are:
 - A shared Orange-first visual identity using the official FPT logo asset.
 
 This is a solo PRM393 university assignment. Android is the primary mobile demo target, while the architecture should remain portable to iOS/Web where Flutter supports it. The initial goal is a coherent, demonstrable school system with a real end-to-end path, not a production-scale clone containing every possible school feature.
+
+### 1.1. Product and Platform Strategy
+
+MyFSchool uses a client-by-actor strategy:
+
+- **Flutter Android is the primary daily-use client** for Teacher, Parent/Guardian, and Student. Android is the required Mobile build/demo target in P0/P1.
+- **React Web is a desktop-first, responsive portal** for Administrator back-office work and a deliberately limited set of authorized Teacher desktop workflows.
+- Administrator has no required Flutter experience in P0/P1. Parent and Student have no React Web access in P0/P1.
+- Teacher Mobile owns attendance, leave review, timetable, announcement inbox/view, and promoted P1 daily-comment/homework/grade-entry/class-feed workflows.
+- Teacher Web owns P0 announcement/email composition and a minimal scoped landing; its read-focused dashboard, teaching-schedule detail, and delivery history are promoted P1 capabilities. It does not duplicate attendance, leave decisions, daily comments, homework, grading, or grade entry unless the user explicitly promotes a named Web workflow.
+- Responsive React layout preserves the authorized Administrator/Teacher workflows at narrower widths; it does not grant Parent or Student Web access.
+- Flutter should remain portable where practical, but Flutter Web is not a P0/P1 product artifact. Do not build, test, deploy, route users to, or maintain a second Web frontend with Flutter unless the user explicitly promotes Flutter Web later.
+- Playwright `web-first assertions` are a synchronization/testing technique. They do not mean the product is Web-first and do not alter actor-client ownership.
+
+When a valid Parent-only or Student-only account attempts React portal access, do not establish portal access or show a partial dashboard. Clear/revoke the attempted Web session through the normal logout/session path and show a generic Vietnamese message directing the user to the Mobile application without revealing additional account information.
+
+Apply the symmetric rule to an Administrator-only account in Flutter: do not render back-office capability or a generic education dashboard. A multi-role account may enter a client only through one of that client's supported roles, and its selected context never inherits permissions from an unsupported role.
 
 ## 2. Source of Truth and Working Rules
 
@@ -150,7 +170,8 @@ ASPNETCORE_ENVIRONMENT=Development
 ASPNETCORE_URLS=http://0.0.0.0:5080
 ConnectionStrings__Default=Server=localhost;Database=MyFSchool;User Id=CHANGE_ME;Password=CHANGE_ME;TrustServerCertificate=True
 Auth__JwtSigningKey=CHANGE_ME_TO_A_LONG_RANDOM_SECRET
-Smtp__Enabled=true
+# Enable only for the P0E communication slice/demo gate
+Smtp__Enabled=false
 Smtp__Host=smtp.gmail.com
 Smtp__Port=587
 Smtp__UserName=CHANGE_ME_TEST_SENDER@gmail.com
@@ -158,6 +179,8 @@ Smtp__Password=CHANGE_ME_GOOGLE_APP_PASSWORD
 Smtp__FromEmail=CHANGE_ME_TEST_SENDER@gmail.com
 Smtp__FromName=MyFSchool
 Smtp__Security=startTls
+# Enable only when the active slice accepts stored attachments
+Storage__Enabled=false
 Storage__Provider=Local
 Storage__LocalRoot=CHANGE_ME_TO_AN_ABSOLUTE_WRITABLE_PATH_OUTSIDE_THE_REPOSITORY
 QA_SQLSERVER_ADMIN_CONNECTION=CHANGE_ME_TO_A_LOCAL_SQL_SERVER_ADMIN_CONNECTION
@@ -237,21 +260,21 @@ At handoff, show commits in review order using the baseline-to-HEAD range (for e
 
 ## 3. Scope and Priorities
 
-### 3.1. MVP Scope
+### 3.1. Assignment Demo Baseline Scope
 
-The MVP must demonstrate these end-to-end workflows:
+The Required P0 assignment baseline must demonstrate these end-to-end workflows:
 
 1. An Administrator provisions users and school data through the web portal, including an Excel import with row-level validation.
 2. A user signs in with a school-provisioned account. If access is lost, the user submits a generic assistance request; an Administrator verifies identity, issues a unique temporary password, and the user must change it before accessing application data.
-3. A Teacher manages an assigned class: attendance, daily comments, homework/submissions, grades/evaluations, and class announcements/feed posts.
-4. A Parent views linked children, attendance, homework, grades/evaluations, announcements, and submits a leave request.
-5. A Student views their own grades by semester, grade detail, timetable, school events, leave-request status, clubs, homework, attendance summary, and class announcements.
+3. A Teacher manages assigned-class attendance, reviews Parent leave requests, reads the teaching schedule, and sends scoped announcements.
+4. A Parent views linked children, attendance, grades, timetable/events, announcements, and submits/tracks a leave request.
+5. A Student views their own grades by semester, grade detail, timetable, school events, leave-request status, clubs, attendance summary, and class announcements.
 6. An authorized Administrator or Teacher sends an email/announcement to a permitted audience, with delivery status recorded.
 7. An authenticated user can reach the assignment-required mobile destinations from Home without dead links: Grades, Timetable, Events, Leave Requests, and Clubs.
 
 #### 3.1.1. Assignment-Required Mobile Screen Flow
 
-The Teacher-provided assignment flow is mandatory, not post-MVP:
+The Teacher-provided assignment flow is mandatory within P0, not a post-baseline enhancement:
 
 ```text
 Login -> Home
@@ -266,7 +289,7 @@ Home -> Câu lạc bộ -> Chi tiết CLB / Gửi yêu cầu tham gia
 
 Public `Đăng ký` is explicitly excluded. Accounts are issued/imported by the school. All protected routes require an authenticated, authorized session.
 
-Canonical mobile route names are `/login`, `/password-help`, `/change-temporary-password`, `/home`, `/grades`, `/grades/:gradeId`, `/schedule`, `/events`, `/events/:eventId`, `/leave-requests`, `/leave-requests/new`, `/leave-requests/:requestId`, `/clubs`, and `/clubs/:clubId`. Required Teacher routes are `/teacher/attendance`, `/teacher/daily-comments`, `/teacher/homework`, `/teacher/homework/new`, `/teacher/homework/:homeworkId`, `/teacher/homework/:homeworkId/submissions`, `/teacher/homework/:homeworkId/submissions/:submissionId`, `/teacher/grade-entry`, and `/teacher/announcements/new`. Define them once in `go_router`; do not rename them, duplicate literal paths across widgets, or create parallel routes without an explicit requirement.
+Canonical P0 Mobile route names are `/login`, `/password-help`, `/change-temporary-password`, `/change-password`, `/home`, `/attendance`, `/grades`, `/grades/:gradeId`, `/schedule`, `/events`, `/events/:eventId`, `/leave-requests`, `/leave-requests/new`, `/leave-requests/:requestId`, `/clubs`, `/clubs/:clubId`, `/announcements`, `/announcements/:announcementId`, and `/profile`. Required P0 Teacher routes are `/teacher/attendance`, `/teacher/leave-requests`, and `/teacher/leave-requests/:requestId`. P1 routes are added only when their slice is promoted: `/daily-comments`, `/homework`, `/homework/:homeworkId`, `/homework/:homeworkId/submit`, `/feed`, `/teacher/daily-comments`, `/teacher/homework`, `/teacher/homework/new`, `/teacher/homework/:homeworkId`, `/teacher/homework/:homeworkId/submissions`, `/teacher/homework/:homeworkId/submissions/:submissionId`, `/teacher/grade-entry`, and `/teacher/feed/new`. Define routes once in `go_router`; nested review/filter/form states do not need a separate route unless they must support restoration/deep links. Do not rename paths, duplicate literals across widgets, or create parallel routes without an explicit requirement.
 
 Required implementation depth:
 
@@ -276,27 +299,32 @@ Required implementation depth:
 - **Leave Requests:** full Parent submission/history/detail and Pending cancellation, plus Teacher review/decision and Student read-only status.
 - **Clubs:** browse/search/filter, detail, membership state, and idempotent join/request-to-join are required. Club creation and moderation are enhancements.
 
-#### 3.1.2. MVP Delivery Priority
+P0 read-only grades, timetable, events, and club catalogs may be supplied by the environment-gated synthetic Development/QA bootstrap or another explicitly authorized data-loading path. P0 does not require separate Administrator editors for those catalogs merely to feed the Mobile demo. The bootstrap remains non-HTTP, idempotent, synthetic-only, and unavailable outside Development/QA; a real authoring/import workflow is added only when explicitly scoped.
 
-- **P0A — Required mobile flow:** login, school-assisted password help with forced password change, role-aware Home, grades, timetable, events, leave requests, clubs, and working navigation between them.
-- **P0B — Core school workflow:** relationship scoping, Teacher attendance, Parent leave submission, Teacher leave review, announcements, and the necessary backend/domain support.
-- **P0C — Required web capabilities:** Administrator user management, Excel import, and authorized email/announcement composition with preview and delivery result.
-- **P1 — Required functional completion:** Teacher daily comments, Teacher grade entry/evaluations, basic homework assignment/submission/grading, scoped class-feed composition, announcement read state, import history, delivery history, complete mobile role dashboards, and the scoped Teacher web dashboard from the approved mockup.
-- **P2 — Polish and extensions:** richer media, advanced analytics/filters, editable timetable administration, event registration, club administration, advanced conflict-resolution UX beyond the required safe-save behavior, and non-essential animation.
+#### 3.1.2. Delivery Priority and Completion Milestones
 
-`P0` identifies the first demonstrable baseline; `P1` remains required before the planned project is considered functionally complete. Only `P2` and Section 3.3 are optional/deferred. If time is constrained, deliver P0 first and implement P1 in smaller vertical slices; do not silently remove P0/P1 behavior or leave dead links.
+- **P0A — Authentication and account access:** shared sign-in, role/client access, session restoration, school-assisted password help, Administrator temporary-password issuance in React Web, forced password change, and logout.
+- **P0B — School directory and required Web operations:** Administrator user/reference-data management sufficient for the demo, one fixed versioned Excel workbook with validation preview/transactional commit, and imported account relationships.
+- **P0C — Assignment-required Mobile information flow:** role-aware Home, Student/Parent grades, timetable, events, clubs, announcements, and working navigation between them.
+- **P0D — Core cross-role school workflow:** resource scoping, leave-request list/create/detail/status, Parent leave submission/cancellation, Teacher leave review, Teacher attendance, Parent/Student attendance visibility, and documented reconciliation.
+- **P0E — Required communication:** authorized Web announcement/email composition, server audience preview, explicit confirmation, immediate Portal App/Gmail delivery, basic per-recipient result, and Mobile announcement inbox.
+- **P1 — Product extensions after a green P0:** Teacher daily comments, basic homework assignment/submission/grading, Teacher grade-entry editor, text-first class feed, announcement read state, import/delivery history UI, and a scoped read-focused Teacher Web dashboard. A P1 slice becomes required only when the user explicitly starts/promotes it.
+- **P2 — Deferred polish and breadth:** dynamic Excel column mapping, scheduled email, draft autosave, email attachments, rich feed media/interactions, advanced analytics/filters/reports, editable timetable administration, event registration, club administration, advanced conflict-resolution UX, Flutter Web, and non-essential animation.
+
+`Assignment Demo Complete` means every P0 acceptance journey and P0 gate passes. `Extended Product Complete` additionally means every explicitly promoted P1 slice passes its own gate. Do not call unimplemented P1 behavior part of a completed P0 baseline, expose it as active navigation, or scaffold it speculatively. P1/P2 work never blocks an otherwise green P0 release/demo unless the user explicitly reprioritizes it into P0.
 
 #### 3.1.3. Scope Labels
 
 Agents must use these labels consistently:
 
-- **Required:** must be implemented for the planned project. P0 and P1 are both Required; priority controls order, not whether the feature exists.
+- **Required/P0:** must be implemented for the assignment demo baseline.
+- **Promoted/P1:** a valuable extension implemented only after P0 or when the user explicitly starts it; once promoted into the current slice, its acceptance checks are mandatory.
 - **Conditional:** required only when a stated role, school policy, record state, or backend capability applies. For example, leave evidence can be required by policy even though it is not required for every request.
 - **Optional UI content:** a decorative or contextual element that may be omitted without removing a business capability, such as a promotional banner or dashboard illustration.
 - **Deferred/P2:** intentionally outside the initial required delivery. Do not expose it as a working navigation item until it is implemented end-to-end.
 - A nullable field or optional attachment is a data rule, not an optional feature. Do not confuse the word `optional` in a field description with permission to omit the surrounding workflow.
 
-### 3.2. Core Demo Journeys
+### 3.2. P0 Core Demo Journeys
 
 At minimum, these journeys must be easy to demonstrate:
 
@@ -308,26 +336,25 @@ At minimum, these journeys must be easy to demonstrate:
 6. **Authorized user sends an announcement/email:** select an allowed audience, preview, confirm, and inspect delivery status.
 7. **Student checks school information:** move from Home to semester grades/detail, today's timetable, and an upcoming event, then return without losing main-tab state.
 8. **Student explores clubs:** search/filter clubs, open a detail, submit a join request once, and see the updated membership state.
-9. **Teacher sends a daily comment:** select an assigned class/date, enter or apply a configured suggestion for one or more Students, review recipients, confirm, see the persisted result, and verify that the linked Parent can read the intended child's comment.
-10. **Teacher completes the homework loop:** create and publish a basic assignment; a Student submits text or an approved attachment; the Teacher reviews and records a score/comment.
-11. **Teacher enters grades efficiently:** choose school year/semester/class/subject/assessment, enter validated scores through a keyboard-friendly roster, review changes, and save once without duplicate records.
-12. **School assists account access:** a locked-out user submits a generic help request; an Administrator finds the pending request, verifies identity outside the application, issues one unique temporary password, communicates it through the school's trusted process, and the user cannot reach Home until replacing it with a new password.
+9. **School assists account access:** a locked-out user submits a generic help request; an Administrator finds the pending request, verifies identity outside the application, issues one unique temporary password, communicates it through the school's trusted process, and the user cannot reach Home until replacing it with a new password.
+
+When a P1 slice is promoted, add its end-to-end journey to the active milestone gate. Daily-comment, homework/submission/grading, grade-entry, class-feed, and Teacher Web dashboard journeys are not P0 completion conditions.
 
 ### 3.3. Deferred / P2 Scope
 
-The following capabilities are not required for the initial planned delivery and must not delay P0/P1 unless the user explicitly promotes them:
+The following capabilities are not required for the P0 assignment baseline and must not delay P0 or an already promoted P1 slice unless the user explicitly promotes them:
 
 - Real-time chat.
 - SMS and mobile push delivery.
 - Tuition billing and payment-gateway integration.
-- Rich Office-document annotation, advanced submission viewers, and plagiarism checking. Basic homework submission and grading remain required in P1.
+- Rich Office-document annotation, advanced submission viewers, and plagiarism checking. Basic homework submission and grading belong only to the promoted P1 homework slice.
 - Advanced analytics and report generation.
 - Video upload/transcoding.
 - Conduct, competency, and complex academic-report templates.
 - Timetable creation/administration, complex recurring schedules, and substitution management.
 - Event registration, capacity/waitlist/ticketing, and event check-in.
 - Club creation, approval, leadership, moderation, and activity management.
-- Reactions/comments with full moderation, edit history, and real-time feed updates. Required announcements and basic Teacher feed composition remain in scope.
+- Reactions/comments with full moderation, edit history, and real-time feed updates. P0 announcements remain required; basic text-first Teacher class-feed composition belongs only to the promoted P1 feed slice.
 - Direct self-service editing of sensitive Student identity fields. A controlled change-request or Administrator update may be added later.
 - Suggestion-library CRUD and positive-recognition sticker management for daily comments.
 - Shortcut personalization, promotional content, and other non-essential dashboard customization.
@@ -351,16 +378,16 @@ Use ASP.NET Core Identity with policy-based authorization. A user may have more 
 
 - Manage school years, classes, subjects, and account lifecycle.
 - Import users, class membership, parent-student links, and teacher assignments.
-- View import history and validation results.
+- View the current import validation/result in P0; searchable multi-batch import history is available only with the promoted P1 history slice.
 - Send school-wide or role-targeted email/announcements.
 - Review password-help requests, verify identity through the school's offline process, issue a unique temporary password, and deactivate/reactivate accounts.
-- View security-relevant audit events.
+- Produce security-relevant audit events for active capabilities; an Administrator audit browser/UI is available only with the promoted P1 history/audit slice.
 
 ### 4.2. Teacher
 
 - Access only assigned classes and subjects.
 - Record and revise attendance within the allowed period.
-- Create homework, grades/evaluations, and class posts for assigned classes.
+- When the corresponding P1 slice is promoted, create homework, enter grades/evaluations, and create text-first class posts for assigned classes.
 - Review leave requests for assigned classes.
 - Send class-scoped announcements/email only to permitted recipients.
 - A Teacher must not gain school-wide administration rights merely by using the web portal.
@@ -368,15 +395,15 @@ Use ASP.NET Core Identity with policy-based authorization. A user may have more 
 ### 4.3. Parent/Guardian
 
 - Access only children connected through an active parent-student relationship.
-- View each linked child's attendance, homework, grades/evaluations, and announcements.
+- View each linked child's attendance, grades/evaluations, and announcements; homework is available only after the P1 homework slice is promoted.
 - Submit and track leave requests.
 - Update only explicitly allowed profile/contact fields.
 
 ### 4.4. Student
 
 - Access only their own academic and class data.
-- View homework, grades/evaluations, attendance summary, and announcements.
-- Student academic records are read-only. The only planned Student write operations are the explicitly scoped homework submission and club join/request commands; comments, posts, and other writes remain unavailable unless promoted later.
+- View grades/evaluations, attendance summary, and announcements; homework is available only after the P1 homework slice is promoted.
+- Student academic records are read-only. The P0 Student write operation is club join/request; homework submission is added only with its promoted P1 slice. Comments, posts, and other writes remain unavailable unless promoted later.
 
 ### 4.5. Authorization Invariants
 
@@ -385,7 +412,7 @@ Use ASP.NET Core Identity with policy-based authorization. A user may have more 
 - Bulk operations must apply the same authorization rules as single-record operations.
 - Security-sensitive changes and bulk communication must be auditable.
 
-### 4.6. MVP Capability Matrix
+### 4.6. Domain Permission Matrix
 
 `Own` means the Student's own record; `Linked` means an active Parent-Student relationship; `Assigned` means an active Teacher-Class/Subject assignment. `Audit/read if exposed` is not a required screen; it means that if a later requested audit view exists, it remains read-only. Deny any capability not granted here or in a later explicit requirement; Administrator is not an automatic bypass for ordinary academic writes.
 
@@ -405,6 +432,19 @@ Use ASP.NET Core Identity with policy-based authorization. A user may have more 
 | Password assistance | Review request/issue temporary password | Submit generic pre-login request for Own account | Submit generic pre-login request for Own account | Submit generic pre-login request for Own account |
 
 Every list and detail endpoint applies the same matrix. Bulk, export, deep-link, retry, and background-job paths do not receive broader permissions than the corresponding interactive command.
+
+### 4.7. Actor–Client Responsibility Matrix
+
+Domain permission and client availability are separate decisions. A capability allowed by Section 4.6 is not automatically exposed on every client.
+
+| Actor | Flutter Android P0/P1 | React Web P0/P1 | Backend/offline responsibility |
+| --- | --- | --- | --- |
+| Administrator | Not provided | P0 account/reference data, fixed import, password-help resolution, announcement/email, and current command results; P1 history/audit screens when promoted | Identity verification for password assistance occurs through the school's trusted offline process |
+| Teacher | P0 daily-work client for Home/class context, schedule, attendance, leave review, and announcement inbox/view; promoted P1 feature workflows | P0 minimal landing plus announcement/email composition; promoted P1 read-focused dashboard, schedule detail, and delivery history; no duplicated roster editing unless explicitly promoted | API enforces assigned class/subject/audience scope |
+| Parent/Guardian | P0 exclusive client for child context, attendance, leave, grades, timetable/events, clubs, and announcements; promoted P1 homework/daily-comment/class-feed reads | Not supported | API enforces active Parent-Student relationships |
+| Student | P0 exclusive client for own grades, timetable/events, leave status, clubs, attendance, and announcements; promoted P1 homework/daily-comment/class-feed behavior | Not supported | API enforces own-record/class eligibility |
+
+React route guards derive access from authenticated server capabilities. They do not render a reduced Parent/Student portal. Flutter does not render Administrator back-office navigation. A later explicit request may promote one named capability to another client, but it must update this matrix, route ownership, UX, affected API/client contract, and QA journey in the same slice.
 
 ## 5. Authentication and School-Assisted Account Access
 
@@ -451,47 +491,47 @@ Users who are already authenticated may use a separate `Đổi mật khẩu` act
 - **Teaching Schedule:** read-only daily/weekly assigned sessions with subject, class, time, room/online location, and current/next-session state.
 - **Attendance:** mark Present, Late, Excused Absence, or Unexcused Absence; support date/session selection, live summary counts, explicit review, confirmation, and idempotent save. A new roster starts as Unmarked rather than silently assuming Present or Absence. Provide an explicit `Đánh dấu học sinh còn lại là Có mặt` action when useful. Approved leave may prefill Excused Absence with a visible source, but the Teacher must review it. Returning to an existing sheet shows saved values and only permits edits within school policy.
 - **Leave Requests:** show pending requests oldest first. Detail includes parent, student, date/session, reason, submitted time, and decision controls. Approval may have a note; rejection requires a reason.
-- **Daily Comments:** select assigned class/date and one or more Students; enter comments manually or apply configured suggestion phrases; review Student recipients and content; confirm once; and display the persisted delivery/result state. Categories must be school-configurable and general enough for the deployed grade level. Positive-recognition stickers are P2 visual enrichment, not a dependency of the required comment workflow.
-- **Homework:** list, create, edit drafts, publish, and inspect assignments with subject, class, instructions, due date/time, and approved attachments. Show submission counts and Student states (`Chưa nộp`, `Đã nộp`, `Đã chấm`). Basic grading records a validated score and Teacher comment; rich Office-document annotation remains deferred.
-- **Grades and Evaluations:** filter by school year, semester, class, subject, and assessment type; validate configured numeric ranges; distinguish draft changes from persisted values; support keyboard Next/Previous between Student rows; review changed/invalid rows before one idempotent batch save.
-- **Class Feed/Announcements:** list and create text posts with an optional approved image attachment and an audience limited by permissions. Title is required and at most 100 characters; body is required and at most 2,000 characters unless a later explicit requirement changes these limits. Author edit/delete and comment-lock actions require server authorization. Do not show Like/Comment actions until those interactions and moderation rules are implemented.
-- **Broadcast:** provide a basic in-app announcement flow for assigned classes using the same audience, preview, confirmation, deduplication, and delivery-status rules as Section 9. SMS, push delivery, group creation, and real-time chat are deferred.
+- **Daily Comments (P1):** when promoted, select assigned class/date and one or more Students; enter comments manually or apply configured suggestion phrases; review Student recipients and content; confirm once; and display the persisted delivery/result state. Categories must be school-configurable and general enough for the deployed grade level. Positive-recognition stickers are P2 visual enrichment.
+- **Homework (P1):** when promoted, list, create, edit drafts, publish, and inspect assignments with subject, class, instructions, due date/time, and approved attachments. Show submission counts and Student states (`Chưa nộp`, `Đã nộp`, `Đã chấm`). Basic grading records a validated score and Teacher comment; rich Office-document annotation remains deferred.
+- **Grade Entry (P1):** when promoted, filter by school year, semester, class, subject, and assessment type; validate configured numeric ranges; distinguish draft changes from persisted values; support keyboard Next/Previous between Student rows; review changed/invalid rows before one idempotent batch save. P0 still requires Student/Parent read-only grades populated through synthetic/demo data or authorized administration, not a Teacher grade-entry UI.
+- **Class Feed (P1):** when promoted, list and create text-first posts with an audience limited by permissions. Title is required and at most 100 characters; body is required and at most 2,000 characters unless a later explicit requirement changes these limits. Image/media, reactions, comments, and moderation are P2 unless separately promoted.
+- **Announcement boundary:** P0 Teacher composition/send is Web-owned under Sections 6.5 and 9; Flutter provides announcement inbox list/detail viewing without requiring tracked read state. A promoted P1 class-feed slice may add Flutter text-post composition, but it must not silently become an email/bulk-send interface. SMS, push delivery, group creation, and real-time chat are deferred.
 
 ### 6.3. Parent Module
 
 - Child switcher when a Parent is linked to multiple Students.
 - Attendance calendar/history for the selected child, newest first, defaulting to the current month and supporting a date-range filter. The dashboard should expose today's status and a compact seven-day preview when data exists.
-- Daily-comment history for the selected child with Teacher, date, category/content, and delivery/read state where tracked.
+- **Daily Comments (P1):** when promoted, show the selected child's permitted comment history with Teacher, date, category/content, and persisted send/result state. The first P1 daily-comment slice does not require recipient read/unread tracking; add it only through a later explicit extension.
 - Read-only timetable and eligible school-event list/detail for the selected child.
-- Leave-request form with date range, session, reason, note, and status history. Start date must not be after end date; reason/note content is required and capped at 500 characters in the MVP.
+- Leave-request form with date range, session, reason, note, and status history. Start date must not be after end date; reason/note content is required and capped at 500 characters in P0.
 - Leave-request detail shows the full submission, timestamps, status, and Teacher response. A Parent may cancel only a Pending request; an Approved or Rejected request remains immutable to the Parent.
-- Read-only homework and grade/evaluation views.
-- Class/school announcement feed.
-- Edit only approved profile and contact fields. Student name, date of birth, national ID/personal identifier, and relationship data are sensitive school records: the MVP keeps them read-only for Parents and routes corrections through an Administrator or a later controlled change-request workflow.
+- Read-only grades/evaluations. Homework visibility is added with the promoted P1 homework slice.
+- P0 read-only class/school announcement inbox with list and detail. A social/class feed is added only with the promoted P1 class-feed slice.
+- Edit only approved profile and contact fields. Student name, date of birth, national ID/personal identifier, and relationship data are sensitive school records: P0 keeps them read-only for Parents and routes corrections through an Administrator or a later controlled change-request workflow.
 
 ### 6.4. Student Module
 
-- Dashboard with direct, working access to grades, timetable, events, leave-request status, clubs, current homework, and recent announcements.
-- Homework list/detail plus basic P1 submission using text and approved attachment types. A Student can see only their own submission, deadline, upload state, score, and Teacher feedback; submission/edit rules follow the assignment deadline and school policy.
+- Dashboard with direct, working access to grades, timetable, events, leave-request status, clubs, attendance, and recent announcements. Homework appears only after the P1 homework slice is promoted and complete.
+- **Homework (P1):** when promoted, provide list/detail plus basic submission using text and approved attachment types. A Student can see only their own submission, deadline, upload state, score, and Teacher feedback; submission/edit rules follow the assignment deadline and school policy.
 - Read-only grades/evaluations grouped by semester and subject.
 - Read-only attendance summary/history, newest first, with the same semantic statuses used by Teachers and Parents.
-- Read-only class/school announcement feed in the MVP.
-- Read-only access to the Student's own daily comments when school policy exposes them directly; otherwise the comments remain guardian-facing.
+- Read-only class/school announcement inbox with list/detail in P0. A social/class feed is added only with the promoted P1 class-feed slice.
+- Read-only access to the Student's own daily comments is added with the promoted P1 daily-comment slice and only when school policy exposes them directly; otherwise comments remain guardian-facing.
 - Read-only timetable and eligible school-event list/detail.
 - Club discovery, detail, membership state, and join/request-to-join action.
 
 ### 6.5. Web Portal
 
-- Responsive dashboard for authorized Administrator and Teacher users.
-- Canonical Web routes are `/login`, `/password-help`, `/change-temporary-password`, `/dashboard`, `/users`, `/password-help-requests`, `/imports`, `/announcements`, `/announcements/new`, and `/delivery-history`. Use one React Router route registry with capability guards; do not create role-named duplicate pages when the same route can render authorized content.
+- Desktop-first responsive portal for authorized Administrator and Teacher users only. Parent/Student React access is not supported in P0/P1.
+- Canonical P0 shared Web routes are `/login`, `/password-help`, `/change-temporary-password`, `/change-password`, `/dashboard`, `/announcements`, `/announcements/new`, and `/profile`. P0 Administrator-only routes are `/users`, `/school-years`, `/classes`, `/subjects`, `/relationships`, `/teacher-assignments`, `/password-help-requests`, and `/imports`. Promoted P1 routes are `/delivery-history`, `/import-history`, `/audit`, and the Teacher-capable read route `/schedule`. Use one React Router route registry with capability guards; do not create role-named duplicate pages when the same route can render authorized content.
 - Administrator management screens for school years, classes, subjects, users, relationships, and assignments.
-- Import center with template download, file upload, validation preview, commit, result download, and import history.
-- Email/announcement composer with permitted recipient selection, preview, confirmation, and delivery history.
-- The Teacher web dashboard is required in P1 for schedule, scoped class/attendance summaries, pending work, and links to implemented Teacher operations. It remains restricted to assigned classes/subjects and must not inherit Administrator navigation or capabilities.
+- P0 Import center with template download, file upload, fixed-header verification, validation preview, transactional commit, and current result download. Searchable import history is P1.
+- P0 Email/announcement composer with permitted recipient selection, preview, confirmation, immediate send, and current delivery result. Searchable delivery history/retry UI is P1.
+- In P0, an authorized Teacher lands on a minimal scoped `/dashboard` containing only identity/class context and links to the P0 announcement/email composer; it must not show fake metrics or Administrator navigation. The promoted P1 Teacher Web dashboard expands this into the approved read-focused mockup with schedule, scoped class/attendance summaries, pending work, and links only to Web-owned operations that actually exist. Attendance editing, leave decisions, daily comments, homework/grading, and grade entry remain Flutter-owned.
 
 ## 7. UX and Design System
 
-Use Material 3 and a mobile-first, light-mode experience. The UI should feel warm, clear, and professional rather than childish. Prefer fast at-a-glance summaries with drill-down detail; a Parent should understand today's attendance in under 30 seconds, and routine Teacher attendance should be completable in a few minutes for a normal class.
+Use one Orange-first, light-mode brand across both clients. Flutter uses Material 3 and a mobile-first interaction model. React Web uses Ant Design and a desktop-first responsive workflow model. Shared tokens, status meanings, language, and accessibility expectations apply to both, but component-library and layout-priority rules do not cross client boundaries. The UI should feel warm, clear, and professional rather than childish. Prefer fast at-a-glance summaries with drill-down detail; a Parent should understand today's attendance in under 30 seconds, and routine Teacher attendance should be completable in a few minutes for a normal class.
 
 ### 7.1. Brand and FPT Logo
 
@@ -537,9 +577,9 @@ Do not use color as the only status signal. Every status includes Vietnamese tex
 ### 7.5. Mobile Information Architecture
 
 - Keep three to five top-level destinations per role. Do not turn every feature into a bottom-navigation item; expose less frequent tasks through dashboard cards or contextual actions.
-- **Teacher:** `Tổng quan`, `Lớp học`, `Điểm danh`, `Thông báo`, `Cá nhân`. Leave review, homework, and grade entry are class-scoped actions reached from `Tổng quan` or `Lớp học`.
-- **Parent:** `Tổng quan`, `Học tập`, `Đơn nghỉ`, `Thông báo`, `Cá nhân`. Attendance, homework, and grades for the selected child are summarized on `Tổng quan` and grouped under `Học tập` where appropriate.
-- **Student:** `Tổng quan`, `Học tập`, `Thông báo`, `Cá nhân`. Student navigation remains simpler; write actions are limited to homework submission and club join/request where those routes apply.
+- **Teacher:** `Tổng quan`, `Lớp học`, `Điểm danh`, `Thông báo`, `Cá nhân`. Leave review is a class-scoped P0 action; homework and grade entry appear only after their P1 slices are promoted.
+- **Parent:** `Tổng quan`, `Học tập`, `Đơn nghỉ`, `Thông báo`, `Cá nhân`. Attendance and grades for the selected child are summarized on `Tổng quan` and grouped under `Học tập`; homework appears only with the promoted P1 slice.
+- **Student:** `Tổng quan`, `Học tập`, `Thông báo`, `Cá nhân`. Student navigation remains simpler; the P0 write action is club join/request, and homework submission is added only with the promoted P1 homework slice.
 - Preserve the navigation stack and scroll state of each main tab. Use `go_router` shell routing rather than scattered `Navigator.push` calls.
 - Deep links and notification taps must pass through authentication and authorization guards before opening a protected detail screen.
 - The Parent dashboard begins with a child identity/context card. The Teacher dashboard begins with the active assigned class/context. Changing context refreshes every scoped summary consistently.
@@ -583,32 +623,33 @@ The Orange square symbol shown beside `MyFSchool` in these mockups is a placehol
 
 #### 7.6.3. Administrator Dashboard
 
-- Start with an Orange welcome/summary hero containing a short status sentence, up to two relevant actions, and an optional school-context image. Keep the hero concise so operational data remains visible without excessive scrolling.
-- Follow with four summary cards driven by real API data, such as active users, active classes, pending operations, recent emails/imports, or other MVP metrics.
-- Primary column contains `Nhiệm vụ cần xử lý` and current import-processing progress. Task rows show type, title, supporting context, timestamp/priority where relevant, and an authorized action.
-- Context column may contain system notifications, upcoming events/deadlines, and security notices. Links must navigate to a real detail/log screen.
-- Storage usage, online-user analytics, backup health, release notes, and similar infrastructure panels are optional post-MVP items. Do not build fake metrics solely to reproduce the screenshot.
+- P0 is a lean operational landing page, not a separate analytics product. Start with an Orange welcome/summary hero containing a short status sentence, up to two relevant actions, and an optional school-context image; expose direct navigation to the active P0 operations.
+- Summary cards are optional UI content in P0 and must reuse data already required by active slices, such as active users/classes or pending password-help requests. Do not add aggregation endpoints solely to reproduce four mockup cards.
+- `Nhiệm vụ cần xử lý`, current import progress, system notifications, and event/deadline panels appear only when their underlying P0 endpoint/state already exists. A new consolidated operational task-center workflow is P2; every displayed action must navigate to a real authorized destination.
+- Storage usage, online-user analytics, backup health, release notes, and similar infrastructure panels are P2. Do not build fake metrics solely to reproduce the screenshot.
 - Skeleton cards/rows shown in the mockup represent the loading state only. Replace them with actual metrics/content after loading; they must not remain in the settled dashboard.
 
 #### 7.6.4. Teacher Dashboard
 
-- Header greets the Teacher by display name and summarizes today's schedule. Primary CTA is `Điểm danh ngay`; secondary CTA `Xem lịch giảng dạy` opens the required timetable screen, including its empty state when no sessions exist.
-- The first row uses four compact summary cards: assigned/active student count, attendance rate, grading workload, and unread/new announcements. Each card must define its time range and scoped class set.
+- The complete approved dashboard is a promoted P1 read-focused Web extension, not a P0 dependency and not a duplicate of the Teacher Mobile workspace. P0 provides only the minimal scoped Teacher landing defined in Section 6.5 so the Teacher can reach announcement/email composition safely.
+- Header greets the Teacher by display name and summarizes today's schedule. Primary CTA is `Soạn thông báo`; secondary CTA `Xem lịch giảng dạy` opens `/schedule`, including its empty state when no sessions exist. Do not retain the mockup's `Điểm danh ngay` Web CTA because attendance editing is Flutter-owned in P0/P1; record this as an intentional scope-driven mockup deviation.
+- The first row uses compact summary cards backed by implemented APIs: assigned/active student count, attendance rate, and unread/new announcements. Grading workload appears only after homework/grade-entry slices are promoted. Each card must define its time range and scoped class set.
 - `Quản lý lớp học hôm nay` lists teaching sessions with subject, class, start/end time, room, semantic status, and `Quản lý` action. Actions and rows are restricted to assigned classes/subjects.
 - Attendance trend uses a simple accessible bar/line chart with text summary or data-table alternative. Never show a chart without a defined period, unit, and empty state.
 - `Điểm danh gần đây` lists Student, class, recorded time, and semantic status. The screenshot's column ordering is visual guidance; use clear table headers and do not place a Student name under a `Trạng thái` header.
-- Context column may show deadlines/events, attendance report download, and task progress for grading/grade entry/lesson preparation. Promotional cards are optional and must not displace pending school work.
-- Schedule and event access must remain available because they are part of the required mobile flow. Report and task-progress widgets appear only when their backing API exists; otherwise omit those optional panels.
+- Context column may show deadlines/events and safe pending-work summaries. Report download and grading/grade-entry progress appear only after those specific capabilities are promoted and backed by authorized APIs. Promotional cards are optional and must not displace pending school work.
+- Schedule access is a deliberate Teacher Web capability defined in Section 1.1, independent of the Mobile assignment flow. Event links appear only when a real authorized Web event destination has also been promoted; do not infer Web scope from a Mobile requirement.
 
 #### 7.6.5. User Management
 
-- Page header contains `Quản lý người dùng`, short description, secondary `Xuất báo cáo`, and primary `Thêm thành viên`.
-- Main card starts with segmented role tabs for `Giáo viên`, `Học sinh`, and `Phụ huynh`, followed by scoped search, filter button with active-filter count, and `Thao tác hàng loạt`.
-- Table supports selection checkboxes, avatar/fallback, full name, stable user code, email, role-specific columns, account status, and explicit row actions. Teacher rows may show subject group and join date; Student/Parent tabs use columns appropriate to their relationships.
+- P0 includes paginated role tabs/list, search/basic status filtering, user detail/create/edit, relationship/assignment management, account activate/deactivate, and authorized temporary-password issuance. Export/report, arbitrary bulk edit, and summary analytics are P2 unless explicitly promoted.
+- Page header contains `Quản lý người dùng`, a short description, and primary `Thêm thành viên`. Show `Xuất báo cáo` only after the report capability is implemented end-to-end.
+- Main card starts with segmented role tabs for `Giáo viên`, `Học sinh`, and `Phụ huynh`, followed by scoped search and a filter button with active-filter count. Add `Thao tác hàng loạt` only with an implemented promoted bulk capability.
+- Table shows avatar/fallback, full name, stable user code, email, role-specific columns, account status, and explicit row actions. Selection checkboxes appear only with an implemented authorized bulk action. Teacher rows may show subject group and join date; Student/Parent tabs use columns appropriate to their relationships.
 - Search covers name, email, or stable code. Filters include account status and applicable class/subject relationships. Preserve query/filter/page state in the URL where practical.
-- Bulk actions remain disabled until rows are selected and require confirmation for deactivate/reactivate or other high-impact changes. Never offer a bulk action the current operator lacks permission to execute.
+- If a later promoted bulk action exists, keep it disabled until rows are selected and require confirmation for deactivate/reactivate or other high-impact changes. Never render a non-working bulk-action control or offer an action the current operator lacks permission to execute.
 - Pagination shows visible range and total count. Empty search/filter results distinguish `Không tìm thấy kết quả` from a genuinely empty user type.
-- Summary cards below the table are optional but, when used, show API-derived totals such as total users, active Teachers, enrolled Students, and pending approvals.
+- Summary cards below the table are optional UI content and, when used, show API-derived totals already available to the page; they do not justify a new P0 analytics slice.
 - Each account row/detail has an authorized `Cấp mật khẩu tạm` action. It requires identity-verification confirmation, shows the generated temporary password once with copy/acknowledge controls, warns that it cannot be viewed again, and never places it in a URL, table, notification history, export, or log.
 - `/password-help-requests` lists Pending requests without exposing them to ordinary Teachers/Parents/Students. Administrator can inspect safe account context, resolve as `Không xác minh được`, or issue a temporary password; filters and counts come from the API.
 
@@ -616,24 +657,23 @@ The Orange square symbol shown beside `MyFSchool` in these mockups is a placehol
 
 - Use a centered, wide workflow with a four-step progress indicator: `Tải tệp lên` -> `Khớp dữ liệu` -> `Kiểm tra` -> `Hoàn tất`. Completed, active, future, error, and disabled steps must be visually distinct and accessible.
 - Step 1 contains a large dashed drag-and-drop zone, supported-format/size guidance, and `Chọn tệp từ máy tính`. Also show cards for `Tải tệp mẫu` and `Hướng dẫn nhập liệu`.
-- Step 2 maps workbook sheet/column headers to required system fields, highlights required mappings, previews several rows, and allows returning without losing the uploaded batch.
+- In P0, Step 2 verifies the fixed versioned workbook sheets/headers against Section 8, shows detected fields and a sample-row preview, and allows returning without losing the uploaded batch. Arbitrary user-defined column mapping is P2; do not build a generic mapping engine for the assignment baseline.
 - Step 3 shows total/valid/warning/error counts and a filterable table with sheet, row, column, original value, stable error code, and Vietnamese explanation. Block commit when blocking errors remain and explain why.
 - Commit requires explicit confirmation summarizing create/update/skip counts and the affected school year/classes. Never write records during file parsing or column mapping.
-- Step 4 displays batch ID, timestamps, created/updated/skipped/failed totals, and actions to download results, view import history, or start another import.
+- Step 4 displays batch ID, timestamps, created/updated/skipped/failed totals, and actions to download the current result or start another import. A searchable multi-batch import-history UI is P1.
 - Uploading, parsing, validating, committing, success, partial failure, fatal failure, and retry/recovery are distinct states. A browser refresh should recover the current server-side batch when possible.
 
 #### 7.6.7. Email and Announcement Composer
 
 - Use the mockup's three-part composition: shared sidebar, wide editor workspace, and narrower recipient/settings rail. At smaller widths, move the right rail into drawers/stacked sections without changing field order.
-- Header contains `Soạn thảo Thông báo & Email`, description, secondary `Lưu nháp`, and primary `Gửi ngay` or `Tiếp tục xem trước`. Never send directly without a final confirmation.
-- Editor includes required title/subject, delivery-channel chips (`Email`, `Portal App`), optional approved template, rich-text toolbar, sanitized body, autosave indicator, attachments, and schedule-send action. `Portal App` means a persisted in-app announcement.
-- Draft autosave must be debounced and expose `Đang lưu`, `Đã lưu`, and failure/retry states. Preserve the draft if recipient loading or attachment upload fails.
+- Header contains `Soạn thảo Thông báo & Email`, description, and primary `Tiếp tục xem trước`. P0 does not require saved drafts. Never send directly without preview and final confirmation.
+- P0 editor includes required title/subject, delivery-channel chips (`Email`, `Portal App`), a small sanitized rich-text toolbar/body, and no attachment or schedule-send control. `Portal App` means a persisted in-app announcement. Saved templates, draft autosave, attachments, and scheduled send are P2 unless explicitly promoted.
 - Recipient rail shows selected audiences as removable chips, group checkboxes, member counts, and an exact deduplicated total. Administrator can choose school/role/class/explicit audiences; Teacher choices are limited to authorized classes and recipients.
 - Show a clear scope notice such as `Thông báo sẽ được gửi tới 342 người nhận qua Email và ứng dụng`, calculated from the server preview rather than client estimates.
-- Advanced options may include header image and response/acknowledgement requirement only when corresponding backend tracking exists. Attachments have configurable type/size limits; the mockup's 25MB is a visual example, not an automatic constant.
+- Advanced header images, response/acknowledgement requirements, and attachments are P2 and appear only when corresponding backend tracking and file authorization have been explicitly promoted. The mockup's 25MB is a visual example, not a P0 constant.
 - `Xem trước hiển thị` renders representative mobile/in-app and email previews using the same sanitized content contract as actual delivery. Preview must not execute unsafe HTML or external scripts.
-- `Lên lịch gửi` requires timezone-aware date/time, future-time validation, and a review of audience snapshot behavior. `Gửi ngay`/schedule confirmation summarizes subject, channels, audience, deduplicated count, and attachments.
-- Recent drafts/sends and help links are optional contextual content. Delivery history is the authoritative place for sent/failed status and retry of failed recipients.
+- P0 `Gửi ngay` confirmation summarizes subject, channels, audience, and deduplicated count. Scheduled delivery is P2.
+- Recent drafts/sends and help links are optional contextual content. P0 must show the current command's per-recipient result; searchable delivery history and operator retry UI are P1.
 
 #### 7.6.8. Responsive and UI-State Contract
 
@@ -643,6 +683,11 @@ The Orange square symbol shown beside `MyFSchool` in these mockups is a placehol
 - Icon-only controls require visible tooltip and accessible name. All interactive controls need keyboard focus, logical tab order, and minimum 44x44 CSS-pixel target where feasible.
 - Use skeletons shaped like final content only while loading. Avoid layout shifts by reserving approximate card/table dimensions.
 - Implement reusable shell, page header, metric card, status tag, data table, empty/error state, upload drop zone, stepper, recipient selector, rich editor wrapper, confirmation modal, and preview components rather than duplicating screen-specific markup.
+
+#### 7.6.9. Web Profile and Password Change
+
+- `/profile` is available only to authenticated Administrator/Teacher portal users and shows school-issued identity, active supported role/context, and permitted contact fields. Omit unsupported sensitive edits and never expose Parent/Student portal UI through this route.
+- `/change-password` requires current password, new password, confirmation, server policy feedback, duplicate-submit prevention, success logout, and fresh sign-in. It is distinct from `/change-temporary-password` and cannot be used as pre-login recovery.
 
 ### 7.7. Flutter Screen Specifications
 
@@ -668,7 +713,7 @@ These mockups cover the assignment-required mobile flow in Section 3.1.1. Grades
 
 - Design for common phone widths around 360-430 logical pixels and adapt to smaller phones, large phones, text scaling, and tablets. Use `SafeArea`/system insets; never draw a fake status bar or hardcode `9:41`.
 - Use a light page background, White cards, subtle borders/shadows, 12-16px radii, 16-24px page padding, and Orange for selected/navigation/primary-action emphasis.
-- Top app bars are simple: back button when needed, Vietnamese title, and at most one or two contextual actions. Home may show logo/product name, notification bell with real unread state, and avatar.
+- Top app bars are simple: back button when needed, Vietnamese title, and at most one or two contextual actions. Home may show logo/product name and avatar. Show an unread badge/bell only after the promoted P1 announcement read-state capability exists; otherwise use a neutral inbox link or omit it.
 - Role-specific bottom navigation persists through `go_router` shell routing, uses icons plus Vietnamese labels, and highlights the active destination in Orange. The exact `Home/Events/Requests/Profile` labels in the images are not universal; follow Section 7.5.
 - Keep authenticated user/session/role context in an application-scoped Riverpod provider. Keep temporary filter/form/UI state scoped to its feature/route. Do not use widget-private variables, static globals, or constructor chains as a substitute for cross-screen session state.
 - A floating action button is reserved for the screen's primary create action. Do not show both a FAB and another equally dominant button for the same action.
@@ -724,13 +769,13 @@ These mockups cover the assignment-required mobile flow in Section 3.1.1. Grades
 
 #### 7.7.7. Create Leave Request
 
-- Follow `visily-create-leave-request.png`: top app bar, policy notice, structured sections, date fields, reason-category chips, detailed-reason field with counter, attachment drop zone/list, validation summary, review action, and a bottom-safe-area primary CTA.
+- Follow `visily-create-leave-request.png`: top app bar, policy notice, structured sections, date fields, reason-category chips, detailed-reason field with counter, validation summary, review action, and a bottom-safe-area primary CTA. The attachment drop zone/list appears only when leave evidence is enabled in the active slice/policy; otherwise omit it rather than showing a dead control.
 - Parent must select or confirm the linked child before dates. Required fields are child, start/end date, applicable session, reason category, and detailed reason. Validate `start <= end`, minimum 20 and maximum 500 characters, and any overlap/past-date school policy.
 - The advance-notice message such as `gửi trước ít nhất 24 giờ` is school policy supplied by configuration/API. Do not hardcode 24 hours if the backend does not enforce it.
 - Category chips use configured Vietnamese values such as `Sức khỏe`, `Gia đình`, `Cá nhân`, or `Học tập`; horizontal scrolling must still expose all values accessibly.
 - Evidence is optional unless policy makes it conditionally required. Support PDF/JPG/PNG, show effective server limit (5MB default only if configured), upload progress, success/error, file size, retry, and remove. Validate content/type on the server as well as client.
 - `Xem lại đơn` opens a review/confirmation state. `Gửi đơn xin nghỉ` stays disabled while invalid/submitting and uses an idempotent submit to prevent duplicate requests.
-- Preserve entered text/dates and successfully uploaded attachment references after recoverable errors.
+- Preserve entered text/dates and, when attachment support is active, successfully uploaded attachment references after recoverable errors.
 
 #### 7.7.8. Leave-Request Detail and Review
 
@@ -755,7 +800,7 @@ These mockups cover the assignment-required mobile flow in Section 3.1.1. Grades
 - Event list supports upcoming/past context, date/category filters, and cards with supplied/licensed image or fallback, title, start/end time, location/online indicator, organizer, audience, and semantic state.
 - Event detail shows full title, description, schedule, location, organizer/contact, eligible audience, attachments/links when safe, and related announcement when available.
 - Student sees events eligible for their class/school; Parent sees events relevant to the selected child; Teacher sees applicable school/class events. API authorization remains authoritative.
-- Registration controls must not appear unless the registration workflow is implemented end-to-end. The required MVP depth is reliable list/detail navigation, not fake registration.
+- Registration controls must not appear unless the registration workflow is implemented end-to-end. The required P0 depth is reliable list/detail navigation, not fake registration.
 - Home `Sự kiện` tile and news/event carousel open this module through guarded routes and preserve the selected event on deep link or refresh.
 
 #### 7.7.11. Clubs
@@ -764,29 +809,40 @@ These mockups cover the assignment-required mobile flow in Section 3.1.1. Grades
 - All content is Vietnamese. Each card includes image/fallback, category, club name, short description, member count, membership state, and action such as `Tham gia`, `Đã tham gia`, or `Chờ duyệt`.
 - Search and category filters work together and expose active state. Recommendations require an actual rule or may fall back to `Câu lạc bộ nổi bật`; never claim personalization without supporting data.
 - Joining/requesting membership is an authenticated server operation with loading, idempotency, capacity/eligibility checks, and configured approval behavior. A Student cannot create/manage a club unless explicitly authorized.
+- P0 may configure a club for immediate `Active` membership or create a `Pending` request. It does not require a club-approval UI; when approval is required, the demo must honestly remain `Chờ duyệt` until a later promoted administration workflow or authorized bootstrap changes it.
 - Use appropriately licensed images with fixed aspect ratios and graceful failure. Clamp descriptions to keep the two-column grid aligned, but expose full content in Club detail.
 - On very narrow screens or large text scaling, switch to one column rather than shrinking cards below usable size.
 
-#### 7.7.12. Flutter State, Localization, and Verification Contract
+#### 7.7.12. Announcement Inbox and Profile
+
+- `/announcements` is a P0 authorized inbox, not the P1 social feed. It shows newest-first title, sender/scope, published time, channel/status where relevant, and list/empty/error states; selecting an item opens `/announcements/:announcementId` with sanitized body and safe supplied links. Do not display an unread badge until the P1 read-state slice is active.
+- Parent/Student visibility follows selected child/enrollment/audience scope; Teacher visibility follows assigned/eligible audience scope. Deep links re-authorize the exact recipient/resource rather than trusting a list item ID.
+- `/profile` shows school-issued identity, stable code, active role/context, and permitted contact fields. Sensitive Student identity and relationship fields remain read-only as defined in Section 6; unsupported edits are omitted, not disabled with fake save behavior.
+- `/change-password` is reached from Profile and requires current password, new password, confirmation, validation, duplicate-submit prevention, success sign-out, and fresh sign-in. It is distinct from the forced temporary-password route and cannot reset an unknown account.
+
+#### 7.7.13. Flutter State, Localization, and Verification Contract
 
 - Vietnamese is mandatory in the implemented UI even where mockups contain English. Use centralized localization/string resources; do not scatter translated literals across widgets.
 - Every async screen has explicit initial/loading, loaded, empty, recoverable error, offline/stale, forbidden, and session-expired handling where relevant.
-- All tappable controls meet the 48dp target where practical, support semantics labels, keyboard/focus on Flutter Web, and do not rely only on color or swipe.
+- All tappable controls meet the 48dp target where practical, support semantics labels on required Android targets, and do not rely only on color or swipe. Flutter Web-specific keyboard/focus verification is Deferred with Flutter Web; physical keyboard behavior on Android is checked only where the promoted feature requires it.
 - Test at common small/large Android viewports, with text scale increased, long Vietnamese labels, keyboard open, and system navigation insets. No clipped text, hidden sticky CTA, or unintended horizontal page overflow is acceptable.
-- Disposable QA scenarios cover reusable status behavior, granular roster editing, keyboard/focus behavior observable through the UI, and critical conditional actions. Cross-client integration covers sign-in/password assistance/forced change, role routing, every required Home destination, grade drill-down, timetable/event detail, club join idempotency, Parent leave submission/detail, Teacher leave decision, attendance save/reopen, daily-comment retry, homework publish/submit/grade, and grade-entry batch validation/save.
+- P0 disposable QA covers reusable status behavior and critical conditional actions: sign-in/password assistance/forced change, role/client routing, every required P0 Home destination, grade drill-down, timetable/event detail, club join idempotency, Parent leave submission/detail, Teacher leave decision, attendance save/reopen, and announcement delivery. Daily-comment retry, homework publish/submit/grade, grade-entry batch validation/save, and roster keyboard/focus scenarios are added only with their promoted P1 slice.
 - Visual implementation is complete only after comparing emulator screenshots with the relevant approved mockups and documenting intentional deviations caused by role scope, Vietnamese localization, accessibility, or explicitly deferred depth beyond the required screen flow.
 
 ### 7.8. Teacher Mobile Workflow Specifications
 
-The following Teacher workflows are required P0/P1 behavior even though they do not yet have standalone approved Visily screens. Build them from the shared mobile design system in Sections 7.1-7.5 and 7.7 rather than copying another product's branding or hardcoded sample data.
+The following specifications define P0 Teacher attendance/leave/announcement behavior and the depth of promoted P1 Teacher extensions even though they do not yet have standalone approved Visily screens. Do not implement a P1 subsection until its slice is explicitly started. Build active slices from the shared mobile design system in Sections 7.1-7.5 and 7.7 rather than copying another product's branding or hardcoded sample data.
 
 #### 7.8.1. Teacher Home and Class Context
 
 - The Teacher dashboard provides an assigned-class context selector, news/announcement carousel, scoped summaries, and service tiles for `Điểm danh`, `Nhận xét hằng ngày`, `Giao bài tập`, `Nhập điểm`, `Thông báo`, and `Lịch giảng dạy` when authorized.
+- P0 renders only implemented P0 tiles: `Điểm danh`, `Thông báo`, and `Lịch giảng dạy`, plus leave review through class context. `Nhận xét hằng ngày`, `Giao bài tập`, and `Nhập điểm` appear only after their P1 slices pass their gates.
 - Changing the active class clears or reloads class-scoped drafts only after warning about unsaved changes. Counts, roster data, and quick actions must never mix Students from different classes.
 - Use the Teacher navigation defined in Section 7.5. Do not add Chat or Contacts tabs merely to resemble the reference flow; deferred tabs must not be dead destinations.
 
 #### 7.8.2. Daily Comments
+
+This is a P1 extension, not a P0 completion condition.
 
 ```text
 Teacher Home -> Nhận xét hằng ngày -> Chọn lớp/ngày -> Nhập hoặc áp dụng câu gợi ý
@@ -820,12 +876,15 @@ Teacher Home/Thông báo -> Feed -> Tạo bài viết -> Chọn đối tượng 
                        -> Xem trước -> Xác nhận đăng -> Bài viết đã lưu
 ```
 
-- Feed cards contain author, published time, audience summary, content, safe media preview, and permitted overflow actions. Use a compact image layout with graceful failures; video upload/transcoding is Deferred/P2.
+- P0 requires the announcement inbox and authorized composition/delivery path, not a social feed. The remaining feed behavior in this subsection is a P1 extension.
+- P1 feed cards contain author, published time, audience summary, content, and permitted overflow actions. Media preview, video upload/transcoding, reactions, and comments are Deferred/P2.
 - Create Post requires an authorized audience and body; a title is required when the content is also sent as an announcement/email. Audience choices come from the server and are limited to assigned classes/roles.
-- Support text plus one approved image in the first P1 slice. Multiple-image layout can be added after the basic upload, preview, retry, remove, and server validation path is complete.
+- The first P1 feed slice is text-only. Image/media upload and multi-image layout are P2 unless separately promoted with the complete upload, preview, retry, remove, authorization, and server-validation path.
 - Teacher edit/delete applies only to authorized posts and requires server-side lifecycle rules. Do not display reaction, comment, comment-lock, or group-chat controls until their corresponding API, authorization, moderation, and state handling exist.
 
 #### 7.8.5. Homework Assignment, Submission, and Grading
+
+This is a P1 extension, not a P0 completion condition.
 
 ```text
 Teacher Home -> Bài tập -> Tạo mới -> Chọn lớp/môn/hạn nộp -> Xem lại -> Đăng
@@ -841,6 +900,8 @@ Student Home -> Bài tập -> Chi tiết -> Nộp bài -> Xác nhận -> Trạng
 
 #### 7.8.6. Grade Entry
 
+This is a P1 extension, not a P0 completion condition. P0 grade list/detail uses authorized seeded/imported/demo academic records without requiring this editor.
+
 ```text
 Teacher Home -> Nhập điểm -> Chọn năm học/học kỳ/lớp/môn/cột điểm
              -> Nhập điểm theo danh sách -> Rà soát thay đổi/lỗi -> Ghi lại
@@ -853,7 +914,7 @@ Teacher Home -> Nhập điểm -> Chọn năm học/học kỳ/lớp/môn/cột 
 
 #### 7.8.7. Messaging Boundary
 
-- Required messaging consists of the persisted announcement inbox/feed, Teacher class-scoped broadcast composition, read/unread state, and web Email/Portal App delivery described in Section 9.
+- Required P0 messaging consists of the persisted announcement inbox/list-detail, Teacher class-scoped broadcast composition, and Web Email/Portal App delivery described in Section 9. Per-recipient read/unread state and the social/class feed are separate promoted P1 capabilities.
 - Real-time one-to-one/group chat, media chat, typing/presence indicators, SMS, and mobile push delivery remain Deferred/P2. Do not add their tabs, fake conversations, or non-working buttons in P0/P1.
 
 ## 8. Excel/CSV Import Requirements
@@ -885,9 +946,9 @@ The downloadable template owns exact machine headers and a Vietnamese instructio
 ### 8.2. Import Workflow
 
 1. **Tải tệp lên:** offer the correct versioned template and import guide, then accept the upload with size, extension, MIME-type, and workbook-structure validation. Create a recoverable import batch but do not modify school records.
-2. **Khớp dữ liệu:** parse into staging models, select the intended sheet/data type, map uploaded columns to system fields, validate required mappings, and preview sample rows. Never write domain records during parsing or mapping.
+2. **Khớp dữ liệu:** parse into staging models, verify the fixed versioned sheets and machine headers, show recognized/missing columns, and preview sample rows. Never write domain records during parsing/header verification. Arbitrary column mapping is P2.
 3. **Kiểm tra:** validate every staged row, show aggregate counts and row-level errors by sheet/row/column/code/message, allow downloading a correction report, and block confirmation while blocking errors remain.
-4. **Hoàn tất:** after explicit confirmation, commit the logical batch in a transaction, record the operator/template/timestamps/checksum/counts/status, then show and allow downloading the final result. Provide access to import history and a new-import action.
+4. **Hoàn tất:** after explicit confirmation, commit the logical batch in a transaction, record the operator/template/timestamps/checksum/counts/status, then show and allow downloading the current final result plus a new-import action. Searchable access to prior batches is P1 through `/import-history`.
 
 ### 8.3. Import Rules
 
@@ -915,19 +976,19 @@ Email is a delivery channel, while an in-app announcement is a persisted domain 
 
 ### 9.2. Composition and Delivery
 
-- Support subject, sanitized rich-text body, optional approved attachments, audience summary, preview, and confirmation.
+- P0 supports subject, a small sanitized rich-text body, audience summary, preview, confirmation, immediate `portalApp` persistence, and immediate Gmail delivery. Saved drafts, autosave, scheduling, templates, and attachments are P2 unless explicitly promoted.
 - Use Vietnamese templates with safe placeholder substitution such as recipient name or class name.
 - Send through one `IEmailSender` port implemented by `GmailSmtpEmailSender` with MailKit; this boundary exists for architecture and does not imply multiple providers in scope.
 - Keep SMTP credentials in secure configuration.
-- For small demo audiences, direct controlled sending is acceptable. For larger audiences, use a background job/queue with retry and throttling.
+- P0 is intentionally bounded to small synthetic/demo audiences and uses direct controlled individual sending with bounded pacing. A background job/queue, scheduled delivery, and large-audience operational controls are P2.
 - Prevent accidental duplicate sends with an idempotency key or equivalent send-command identifier.
 
 ### 9.3. Tracking and Privacy
 
 - Persist the message, creator, audience definition, recipient snapshot, timestamps, and status per recipient (`Pending`, `Sent`, or `Failed`).
 - Record failure categories without exposing secrets or unnecessary personal data.
-- Retrying failed recipients must not resend successfully delivered messages.
-- Sanitize HTML and validate attachment type/size.
+- If the P1 operator-retry workflow is promoted, retry only failed recipients and never resend successful delivery records.
+- Sanitize HTML in every active composition path. Validate attachment type/size only when the P2 attachment capability is separately promoted; P0 accepts no email/announcement attachments.
 - Audit school-wide sends and do not log message bodies or email addresses unnecessarily.
 
 The password-help workflow never sends a reset link, code, temporary password, or existing password by email. Gmail SMTP is used only for authorized school announcements/notifications required by this project.
@@ -942,7 +1003,7 @@ The password-help workflow never sends a reset link, code, temporary password, o
 
 ## 10. Domain Model Baseline
 
-Refine the model during Phase 1, but preserve these concepts and relationships:
+Introduce domain concepts only in the vertical slice that first needs them; do not model the entire roadmap before a client consumes it. Preserve these concepts and relationships when their P0 or promoted P1 slice is implemented:
 
 - `User`, `Role`, `RefreshToken`, `PasswordHelpRequest`, temporary-password state/expiry, and account status/audit data. Use GUID primary keys consistently for ASP.NET Core Identity users/roles and domain entities; keep human codes separate.
 - One `SchoolProfile`/configuration for the single-school deployment, containing safe school identity/contact/timezone settings without introducing multi-tenant scoping.
@@ -951,16 +1012,16 @@ Refine the model during Phase 1, but preserve these concepts and relationships:
 - Student class enrollment with effective dates or school-year scope.
 - Parent-student relationship supporting multiple guardians and multiple children.
 - `TimetableEntry`/`ClassSession` with day/date, start/end time, class, subject, Teacher, room/online location, and optional preparation note.
-- `SchoolEvent` with schedule, location, organizer, audience/publication state, and safe attachments/links.
+- `SchoolEvent` with schedule, location, organizer, audience/publication state, and optional safe links. Stored event attachments exist only after an attachment-bearing event slice activates Section 10.1.
 - `Club` and `ClubMembership`/join request with category, description, capacity/eligibility where used, and membership status.
 - `AttendanceRecord` with date, session, status, recorder, and timestamps.
 - `LeaveRequest` with requester, student, period, reason, decision, and reviewer.
-- `DailyComment`/delivery result with class/date, Student, Teacher, category/content, and timestamps; suggestion phrases are separately configurable reference data.
-- `HomeworkAssignment` with class/subject, due date, publication status, and attachments, plus `HomeworkSubmission`/attachment and grading result scoped to one Student.
+- P1 `DailyComment`/delivery result with class/date, Student, Teacher, category/content, and timestamps; suggestion phrases are separately configurable reference data.
+- P1 `HomeworkAssignment` with class/subject, due date, publication status, and attachments, plus `HomeworkSubmission`/attachment and grading result scoped to one Student.
 - `Assessment`, `Grade`, and textual `Evaluation` with explicit score constraints.
-- `FeedPost`/`Announcement`, audience definition, attachments, and publication state.
+- P0 `Announcement` plus audience and publication state; P1 may add text-first `FeedPost`. Announcement/feed attachments are P2.
 - `EmailMessage`, recipient delivery records, and import batch/row-result records.
-- `StoredFile` metadata plus explicit attachment links for leave requests, homework assignments, homework submission attempts, feed/announcement content, and other approved owners. Binary file contents are not stored in SQL Server.
+- When an attachment-bearing slice is active, `StoredFile` metadata plus explicit attachment links for its approved owners. P0 leave evidence is conditional, P1 homework activates assignment/submission storage, and feed/announcement storage is P2. Binary file contents are never stored in SQL Server.
 
 Important rules:
 
@@ -971,7 +1032,7 @@ Important rules:
 - Homework submission transitions are `NotSubmitted -> Submitted -> Graded`. While the assignment is Published, a Student may submit/resubmit before the deadline; each resubmission creates an auditable attempt version and exactly one current attempt. By default, a first submission after the deadline is accepted and marked `isLate` until the Teacher closes the assignment, but a late attempt cannot be replaced. Closed/Archived assignments reject submission. `isLate` is derived metadata, not a lifecycle transition.
 - Daily-comment and homework/grade submission commands are idempotent. Define unique business keys for one Student assignment submission/attempt and one published daily comment per intended Student/date/category so retries cannot duplicate records.
 - Initial grade/homework scores use the inclusive `0.0-10.0` scale with at most one decimal place. Keep the rule server-owned/configurable for a later school policy; empty, zero, absent, and not-yet-published are distinct states.
-- Announcement read/unread state belongs to each recipient (or recipient membership), not one global `isRead` flag on the announcement.
+- When the P1 announcement read-state slice is promoted, read/unread state belongs to each recipient (or recipient membership), not one global `isRead` flag on the announcement.
 - The relationship model supports multiple guardians per Student and multiple Students per Parent even if demo seed data starts with one child.
 - Timetable, event, and club queries apply the same Student enrollment, Parent-child, and Teacher assignment scoping as other academic data.
 - Club join/request commands are idempotent and enforce valid state transitions; repeated taps must not create duplicate memberships.
@@ -986,8 +1047,10 @@ Important rules:
 
 All user files cross the Backend API. Neither Flutter nor React may write to SQL Server, a server directory, or object storage directly.
 
+This contract activates only when the current slice accepts user attachments: conditionally for P0 leave evidence, necessarily for the promoted P1 homework file path, or later for a separately promoted P2 media/announcement attachment path. Excel import uses its own bounded staging/batch path and does not by itself require the general `StoredFile` attachment API. Do not scaffold `StoredFile`, upload endpoints, cleanup jobs, or client pickers before an active consumer needs them.
+
 - SQL Server stores only file metadata and ownership/association data: server-generated file ID, opaque storage key, sanitized original display name, server-detected content type, byte length, SHA-256 hash, uploader, timestamps, lifecycle/scan state, and the owning domain record/attachment order. Never store a client path, public URL, base64 payload, or raw file bytes in a domain table.
-- The required P0/P1 storage implementation is `LocalFileStorage` behind an Application-level `IFileStorage` port. It writes under the absolute `Storage__LocalRoot` supplied by Backend configuration on the local Windows machine. The path must be outside the repository, `wwwroot`, build output, and source folders. The API must fail readiness when storage is enabled but the configured root is absent, non-absolute, inside the repository/public web root, or not writable.
+- The first active attachment slice uses `LocalFileStorage` behind an Application-level `IFileStorage` port. It writes under the absolute `Storage__LocalRoot` supplied by Backend configuration on the local Windows machine. The path must be outside the repository, `wwwroot`, build output, and source folders. The API must fail readiness when storage is enabled but the configured root is absent, non-absolute, inside the repository/public web root, or not writable; disabled storage must not block unrelated slices.
 - Store bytes under server-generated opaque keys, never the original filename. Prevent traversal and symlink/reparse-point escape by resolving and verifying every final path remains below the configured root. Do not expose the storage root as static files.
 - `POST /api/v1/files` performs an authorized pending upload for a declared purpose, streams to a temporary file with bounded size, validates extension plus detected content/MIME, computes the hash, then atomically moves the accepted bytes into storage and returns an opaque file ID. The subsequent leave/homework/announcement command supplies owned pending file IDs; Backend rechecks uploader, purpose, type, size, count, scope, and expiry before attaching them transactionally.
 - A failed domain submit leaves valid uploads pending so the client can retry without re-uploading. Pending files expire after a configurable default of 24 hours and are removed by a safe bounded cleanup job. Cleanup must never delete attached/auditable files or follow untrusted paths.
@@ -1108,19 +1171,19 @@ Use these internal/wire values and map them to the listed Vietnamese UI. Do not 
 | Delivery channel | `email`, `portalApp` | `Email`, `Ứng dụng` |
 | Password-help request | `pending`, `resolved`, `rejected` | `Đang chờ`, `Đã xử lý`, `Không xác minh được` |
 
-If a new state is genuinely required, update Domain rules, OpenAPI/DTOs, both client mappings, filters/chips, transition validation, and QA fixtures/scenarios in the same slice. Never repurpose an existing state to mean something else.
+If a new state is genuinely required, update Domain rules, OpenAPI/DTOs, every actual consuming client mapping, filters/chips, transition validation, and QA fixtures/scenarios in the same slice. Never repurpose an existing state to mean something else.
 
 ### 12.3. Contract Change Discipline
 
-- Change Backend DTO/OpenAPI and server validation first, then update both typed clients and UI mappings in the same bounded slice.
-- Treat property rename/removal, type/nullability change, new required field, enum change, validation/status-code change, and authorization/scope change as breaking until both clients and QA prove compatibility.
+- Change Backend DTO/OpenAPI and server validation first, then update every actual consuming client and UI mapping in the same bounded slice. A client that does not call, model, route to, or depend on the changed contract is `Not affected`; record the concrete reason instead of modifying it speculatively.
+- Treat property rename/removal, type/nullability change, new required field, enum change, validation/status-code change, and authorization/scope change as breaking for every actual consumer until affected clients and QA prove compatibility. Shared authentication/session, global error, public configuration, and cross-role authorization contracts normally affect both clients.
 - Do not keep duplicate old/new fields indefinitely. If a temporary compatibility window is explicitly required, document its removal condition and test both forms externally.
 - Contract examples and seed fixtures use synthetic Vietnamese data and must conform to the same validators as real requests.
 - Use optimistic concurrency or an explicit documented alternative for attendance and grade editing; never silently overwrite a newer value.
 
 ### 12.4. Initial Configurable Defaults
 
-These are implementation defaults, not scattered client constants. The Backend is authoritative and exposes effective safe client settings through a typed public configuration/metadata response or the relevant form-init response:
+These are implementation defaults, not scattered client constants. A default is enforced/exposed only when its capability is active. The Backend is authoritative and exposes effective safe client settings through a typed public configuration/metadata response or the relevant form-init response:
 
 - School timezone: `Asia/Ho_Chi_Minh`.
 - Score scale: `0.0-10.0`, maximum one decimal place.
@@ -1128,11 +1191,11 @@ These are implementation defaults, not scattered client constants. The Backend i
 - Excel import: `.xlsx`, maximum `10 MB` per workbook.
 - Leave evidence and homework submission: PDF/JPG/PNG, maximum `5 MB` per file and `3` files per submission.
 - Pending unattached upload lifetime: `24 hours`; attached/auditable files follow their owning record's retention policy.
-- P1 feed post: text plus at most `1` JPG/PNG image, maximum `5 MB`.
-- Announcement/email attachments: approved safe types, maximum `5` files and `10 MB` total before encoding/provider overhead.
+- P2 feed image when promoted: at most `1` JPG/PNG image in the first media slice, maximum `5 MB`.
+- P2 announcement/email attachments when promoted: approved safe types, maximum `5` files and `10 MB` total before encoding/provider overhead.
 - Access token: `15 minutes`; rotating refresh token: `7 days`; generated temporary password: `24 hours` and forced change on first use.
 
-Changing a default requires Backend validation/configuration, both client displays/validation, OpenAPI/metadata, and QA boundary cases in the same slice. Client validation improves feedback but never replaces server enforcement.
+Changing a default requires Backend validation/configuration, every actual consuming client display/validation, OpenAPI/metadata, and QA boundary cases in the same slice. Client validation improves feedback but never replaces server enforcement.
 
 ## 13. Quality, Security, and Accessibility
 
@@ -1142,7 +1205,7 @@ Changing a default requires Backend validation/configuration, both client displa
 - Validate uploads by content as well as extension; enforce configurable size limits and store them outside the public web root.
 - Apply least privilege to database, SMTP, and file-storage credentials.
 - Add audit records for login, password-help request resolution, temporary-password issuance, forced password change, role or relationship changes, imports, bulk sends, attendance edits, and grade edits. Never include plaintext temporary passwords in audit data.
-- Verify domain rules, authorization decisions, authentication, scoped data access, import commit behavior, email retry/idempotency, and the core demo journeys through the disposable QA harness in Section 14.
+- Verify domain rules, authorization decisions, authentication, scoped data access, import commit behavior, P0 email send idempotency/current results, and the core demo journeys through the disposable QA harness in Section 14. Verify failed-recipient operator retry only after that P1 workflow is promoted.
 - Prefer black-box contract and end-to-end checks against built/running product artifacts. Temporary source-level tests are allowed only under `qa/`; the three product directories must not acquire test projects, test directories, test dependencies, or test-only endpoints.
 - Coverage may be collected temporarily as a diagnostic, but a percentage is not a completion target. Required journeys and critical authorization/validation branches must be explicitly mapped to QA scenarios.
 - Provide meaningful empty/error/loading states and follow the accessibility rules in Section 7.
@@ -1219,16 +1282,16 @@ The repository currently contains Flutter's generated `myfschoolse1910/test/widg
 
 The QA harness runs directly on the local Windows machine. It requires a reachable local SQL Server Developer/Express/LocalDB-compatible instance, .NET 10 SDK, the locked Node toolchain, Flutter/Android tooling, and a dedicated Gmail test account with Google App Password when the email gate is in scope. Use these host tools directly without introducing another infrastructure runtime.
 
-Before starting processes, `qa/scripts/up.ps1`:
+Before starting processes, `qa/scripts/up.ps1` performs only the steps required by the selected tier and affected-product map:
 
 1. Checks for an existing run manifest. Resume it only when its recorded PIDs/start times, database name, storage path, ports, and artifact/worktree identity still match and readiness passes; otherwise run exact safe teardown before creating a new run. Never start a second concurrent harness accidentally.
 2. Loads the repository-root `.env`, validates only settings required by the affected gate, creates a unique safe run ID, reserves explicit API/Web ports, and writes resolved non-committed inputs to `qa/.env.e2e.generated`.
 3. Connects through `QA_SQLSERVER_ADMIN_CONNECTION`, creates only a uniquely named database such as `MyFSchool_QA_<safeRunId>`, derives the run-specific application connection string, and applies normal EF Core migrations. It must refuse to continue if the target name lacks the exact QA prefix/run ID or collides with an existing non-owned database.
-4. Creates a unique attachment directory under the operating-system temporary directory, not inside the repository, and supplies it as the run's absolute `Storage__LocalRoot`.
-5. Starts the published ASP.NET Core API and the built React static server as hidden child processes, captures their exact PIDs/start times/commands and redirected log paths in a run manifest, and waits on bounded HTTP readiness probes. A process existing is not sufficient readiness.
-6. Builds Flutter with the same API exposed through an emulator-safe host such as `10.0.2.2`, installs the current APK on the selected emulator, and keeps the Web origin/API CORS allowlist explicit.
+4. When an attachment/file gate is affected, creates a unique attachment directory under the operating-system temporary directory, not inside the repository, and supplies it as the run's absolute `Storage__LocalRoot`; otherwise leaves storage disabled.
+5. Starts the published ASP.NET Core API whenever an API-backed consumer/integration gate is affected. Starts the built React static server only for an affected Web or named cross-client gate. Record exact PIDs/start times/commands and redirected log paths in a run manifest, and wait on bounded HTTP readiness probes; a process existing is not sufficient readiness.
+6. Builds/installs Flutter only for an affected Mobile or named cross-client gate, using the same API exposed through an emulator-safe host such as `10.0.2.2`. Do not require Node/Web, an emulator, Gmail, or attachment storage for a gate that does not consume it.
 
-Provision synthetic accounts and school data through normal secure bootstrap/import/API workflows. Prefer the Excel import path because it verifies a required feature. Generate runtime account passwords, temporary passwords, database names, and run markers per run; never hardcode or retain them in source/artifacts.
+Provision the initial synthetic Administrator through the documented production-safe Development/QA bootstrap command established in the Executable Skeleton; it must be environment-gated, idempotent, non-HTTP, and must not log/retain plaintext credentials. Before P0B exists, use that same safe path/API setup to create the minimum accounts needed for P0A tests without depending on unfinished import. After the fixed Excel import slice passes, prefer import plus normal APIs for Teacher/Parent/Student/class relationships because that verifies the required workflow. Generate runtime passwords, temporary passwords, database names, and run markers per run; never hardcode or retain them in source/artifacts.
 
 Email verification uses the fixed Gmail transport in Section 9.4:
 
@@ -1236,30 +1299,30 @@ Email verification uses the fixed Gmail transport in Section 9.4:
 - The external QA mail checker connects to Gmail IMAP over TLS with the same dedicated account and Google App Password, waits with a bounded timeout for exact run-marked messages, and verifies subject/recipient/count without recording bodies or credentials. It may delete only messages containing the exact current run marker during `finally` cleanup.
 - If Gmail credentials/connectivity are missing while the email feature is an affected gate, report the gate blocked; do not silently replace Gmail with a fake/capture server, skip the scenario, or claim delivery from a database status alone.
 
-Always run `qa/scripts/down.ps1` in a `finally` path. It verifies the run manifest, stops only child PIDs whose executable/start time/command still match, drops only the exact run-owned QA database after revalidating its name, deletes only the exact run-owned temporary attachment directory and generated environment file, and leaves unrelated SQL databases, processes, files, and emulator data untouched. Never use broad process kills, SQL wildcard drops, or recursive cleanup against an unresolved path.
+Whenever the harness owns resources, run `qa/scripts/down.ps1` in a `finally` path. It verifies the run manifest, stops only child PIDs whose executable/start time/command still match, drops only the exact run-owned QA database after revalidating its name, deletes an attachment directory only when the manifest records one for this run, deletes the generated environment file, and leaves unrelated SQL databases, processes, files, and emulator data untouched. Never use broad process kills, SQL wildcard drops, or recursive cleanup against an unresolved path.
 
 ### 14.4. Test Layers and Order
 
 Run the cheapest deterministic checks first and stop the gate on failure:
 
 1. **Static/build gate:** format, analyze/lint, restore, and production-build each touched product. Before a cross-client or release gate, build all three products from the same worktree revision.
-2. **Infrastructure gate:** create the isolated local QA database/storage, start API/Web processes, and wait for bounded readiness checks; validate Gmail connectivity only when email is affected.
-3. **API integration gate:** verify health, authentication/refresh/password assistance/forced change, role/resource scoping, validation, concurrency, idempotency, import, announcement/email, and the APIs touched by the feature.
-4. **Web E2E gate:** run Administrator and Teacher browser journeys against the real API/database, initially on Chromium; add a smaller cross-browser smoke matrix only after Chromium is stable.
-5. **Mobile E2E gate:** install the newly built APK, clear app state for each independent scenario, and run Maestro flows against the same real API/database.
-6. **Cross-client journey gate:** verify a mutation made by one client becomes visible with correct authorization and state in another client.
+2. **Infrastructure gate:** create only the isolated database/storage resources required by the affected scenario, start only required API/Web processes, and wait for bounded readiness checks; validate Gmail connectivity only when email is affected.
+3. **API integration gate:** for an affected Backend/API path, verify health plus the applicable authentication, authorization, validation, concurrency, idempotency, import, email, and feature scenarios. Do not rerun unrelated API suites during a narrow slice.
+4. **Web E2E gate:** when Web is affected, run the relevant Administrator/Teacher browser journey against the real API/database, initially on Chromium; add a smaller cross-browser smoke matrix only after Chromium is stable.
+5. **Mobile E2E gate:** when Mobile is affected, install the newly built APK, clear app state for each independent scenario, and run the relevant Maestro flow against the same real API/database.
+6. **Cross-client journey gate:** only when required by Section 14.4.1/14.4.2 or the active phase gate, verify a mutation made by one client becomes visible with correct authorization and state in another client.
 7. **Evidence gate:** retain redacted failure artifacts and a concise result manifest until diagnosis or release cleanup.
 
 Do not replace the API with route mocks in end-to-end gates. Network mocking is acceptable only for an explicitly isolated UI-state check and must not be counted as backend/frontend/mobile integration coverage.
 
 #### 14.4.1. Three-Product Coverage Matrix
 
-The autonomous loop explicitly covers all three products. A product may be skipped only in a narrow targeted check when the current change provably cannot affect it; no product may be skipped from a cross-client, phase, or release gate.
+The complete project QA strategy covers all three products, but a bounded slice verifies only touched products and actual affected consumers. Do not build or test an unrelated client merely because it exists. A full three-product gate is mandatory only for shared authentication/session/public-configuration/error behavior, a journey intentionally crossing React and Flutter, an explicitly named milestone gate, or final release verification.
 
 - **`backend/` (.NET 10):** restore with a .NET 10 SDK, verify every project targets `net10.0`, build in `Release`, apply EF Core migrations to a fresh SQL Server QA database, start the real API, then run external health/OpenAPI/authentication/authorization/validation/idempotency/integration scenarios. A .NET build alone is not an API gate.
 - **`frontend-web/` (React):** perform a clean locked dependency install, TypeScript type-check, lint, production Vite build, serve the built output, and run Playwright against the real QA API/database. A mocked API or Vite development server alone does not satisfy the cross-client gate.
 - **`myfschoolse1910/` (Flutter):** restore packages, format-check, analyze, build a production-representative Android APK with the QA API URL supplied externally, install it on a clean emulator state, and run Maestro flows against the same QA API/database. Widget rendering alone does not satisfy the mobile E2E gate.
-- **Shared contract trigger:** a change to endpoint path, method, authentication, authorization, request/response DTO, enum, validation code, pagination, file contract, or OpenAPI schema automatically marks all consuming Backend/Web/Flutter gates as affected. Update typed clients/mappers and run the relevant scenario through both clients before completion.
+- **Shared contract trigger:** a change to endpoint path, method, authentication, authorization, request/response DTO, enum, validation code, pagination, file contract, or OpenAPI schema marks Backend and every actual consumer as affected. Update only consuming typed clients/mappers and run their relevant scenarios. Authentication/session/global-error/public-config changes normally affect both clients; a feature-specific Web-only or Mobile-only endpoint does not.
 - **Artifact identity:** the result manifest records the Git/worktree identity when available, .NET SDK/runtime and API artifact, Node/package-manager and Web build, Flutter/Dart SDK and APK checksum, migration version, QA run ID, and scenario results. Do not combine results from unrelated builds and call them one passing full-stack run.
 
 #### 14.4.2. Change-Impact Decision Table
@@ -1271,28 +1334,43 @@ Use this table mechanically. `Required verification` is the minimum, not permiss
 | Documentation or mockup-reference edit only | All `Not affected` | Markdown/path/consistency checks; no product build required |
 | Backend internal refactor with unchanged observable contract | Backend `Touched`; clients `Not affected` only with evidence | .NET Release build plus targeted API integration; run a consumer smoke if behavior could change |
 | Database entity/migration/query change | Backend `Touched`; clients `Affected` when DTO/behavior changes | Clean migration on fresh SQL Server, API integration, affected Web/Mobile journeys |
-| Authentication, authorization, relationship scope, session, CORS, or error-contract change | All three `Affected` | Backend + Web + Flutter builds, API security scenarios, relevant Web and Maestro role journeys |
-| Endpoint/DTO/enum/nullability/validation/pagination/file/OpenAPI change | Backend `Touched`; both clients `Affected consumers` | All three builds and the corresponding cross-client journey; no exception |
-| React-only layout/copy/local form behavior with unchanged API | Web `Touched`; Backend API dependency; Flutter `Not affected` with reason | Web type-check/lint/build, targeted Playwright, API readiness/contract smoke |
-| Flutter-only layout/copy/local form behavior with unchanged API | Flutter `Touched`; Backend API dependency; Web `Not affected` with reason | Flutter format/analyze/APK, targeted Maestro, API readiness/contract smoke |
+| Shared authentication/session, relationship/resource authorization, or global error-contract change | Backend plus every supported actual client `Affected` (normally all three) | Backend + affected Web/Flutter builds, API security scenarios, and relevant role journeys in each actual client |
+| Web refresh-cookie, CORS, origin, or anti-forgery behavior with unchanged native token contract | Backend and Web `Affected`; Flutter `Not affected` with evidence | Backend/Web builds, cookie/origin/security API checks, and targeted Web E2E; no Flutter gate unless the native contract also changed |
+| Endpoint/DTO/enum/nullability/validation/pagination/file/OpenAPI change | Backend `Touched`; actual consuming clients `Affected consumers`; non-consumers `Not affected` with reason | Backend build/integration plus every consuming client build/journey; full three-product gate only for a genuinely shared contract |
+| React/Flutter copy or isolated styling with no navigation/state/contract change | Owning client `Touched`; Backend/other client `Not affected` | Owning client format/type/analyze and build plus narrow semantic/visual comparison; no SQL/API/Gmail, though an affected Mobile visual check may use an emulator |
+| React-only navigation or local form behavior with unchanged API | Web `Touched`; Backend API dependency; Flutter `Not affected` with reason | Web type-check/lint/build, targeted Playwright positive/invalid state, API readiness/contract smoke only when the page consumes it |
+| Flutter-only navigation or local form behavior with unchanged API | Flutter `Touched`; Backend API dependency; Web `Not affected` with reason | Flutter format/analyze/APK, targeted Maestro positive/invalid state, API readiness/contract smoke only when the screen consumes it |
 | Shared business journey or role permission change | All participating products `Affected` | Three-product integration gate and every affected role path |
 | Dependency/runtime/build/configuration change | Product owning the manifest `Touched`; consumers affected if runtime contract changes | Clean restore/install and production build; targeted smoke, then cross-client gate when connectivity/contract/security changes |
 | QA-harness-only change | QA `Touched`; product code `Not affected` | QA preflight plus a known passing smoke and a deliberate safe failure proving diagnostics/exit code; no product manifest mutation |
 
 When uncertain between two rows, choose the broader verification row. The agent may narrow it only after recording concrete evidence in the slice contract.
 
+#### 14.4.3. Slice Verification Tiers
+
+Choose the smallest tier that satisfies Section 14.4.2; an observed failure outside the chosen minimum still must be investigated.
+
+| Tier | Applies to | Required minimum |
+| --- | --- | --- |
+| `Small` | Documentation, requirement/mockup reference, copy, isolated styling, or behavior-preserving local refactor with no shared contract/security/data change | Structural/format/static checks and the narrow affected UI or consistency check; no SQL/API/emulator/Gmail environment unless directly needed |
+| `Standard` | One product behavior with unchanged shared authentication/authorization/data contract, or one feature-specific Backend contract with known consumers | Touched product build, targeted external positive plus invalid/forbidden scenario, and builds/journeys for actual consumers only |
+| `Critical` | Authentication/session, authorization/resource scope, database migration, shared API/error/config contract, import commit, file access, email delivery, or intentional cross-client state | Full affected-product integration, security/invalid paths, migration/environment checks, and named cross-client scenario |
+
+Milestone/release gates aggregate their completed slices and may require all three products. A `Small` or `Standard` slice must not be escalated to `Critical` solely because optional tooling or an unrelated product is unavailable.
+
 ### 14.5. Required Cross-Client Scenarios
 
-Build these scenarios incrementally as their features are implemented:
+Build these scenarios incrementally. Scenarios 1-3 and 6-8 are P0 only to the depth defined below; scenarios 4, 5, and 9 are added when their P1 slices are promoted:
 
 1. Administrator imports synthetic Teacher/Parent/Student/class relationships in Web; those accounts authenticate through the API and see only scoped Flutter data.
-2. Teacher records attendance in Flutter or an authorized Web workflow; Parent and Student Flutter views show the correct status while unrelated users receive `403`/not-found behavior according to the API contract.
-3. Parent submits a leave request with safe evidence in Flutter; the assigned Teacher can download/review it, an unrelated account cannot, the Teacher decides it, and the Parent sees the decision; attendance reconciliation follows Section 7.8.3.
-4. Teacher publishes homework with an attachment; an intended Student can download it and submits text plus an attachment in Flutter; the Teacher can open the exact attempt and grade it; Student and linked Parent see only the authorized result, while an unrelated Student cannot access either file.
-5. Teacher saves grades; Student/Parent grade screens show the persisted values, while a concurrent stale save is rejected or handled by the documented policy.
+2. Teacher records attendance in Flutter; Parent and Student Flutter views show the correct status while unrelated users receive `403`/not-found behavior according to the API contract. React Web attendance editing is not a P0/P1 workflow.
+3. Parent submits a leave request in Flutter; the assigned Teacher reviews/decides it, an unrelated account cannot access it, and the Parent sees the decision; attendance reconciliation follows Section 7.8.3. When leave evidence is enabled in the active P0D slice, extend this same scenario with authorized upload/download and unrelated-user file denial; otherwise evidence is not a P0 gate.
+4. **Promoted P1 homework:** Teacher publishes homework with an attachment; an intended Student can download it and submits text plus an attachment in Flutter; the Teacher can open the exact attempt and grade it; Student and linked Parent see only the authorized result, while an unrelated Student cannot access either file.
+5. **Promoted P1 grade entry:** Teacher saves grades; Student/Parent grade screens show the persisted values, while a concurrent stale save is rejected or handled by the documented policy. P0 validates read-only grade scoping using authorized synthetic/demo records without requiring this mutation path.
 6. Administrator/Teacher sends a Portal App announcement and Gmail Email from Web to unique aliases of the dedicated QA mailbox; authorized Flutter inboxes receive the persisted announcement, Gmail IMAP confirms only the deduplicated run-marked messages, and no real school address is contacted.
 7. Password assistance returns a generic pre-login response, creates at most one Pending request for a matching account, lets only an Administrator issue a one-time-visible temporary password, revokes old refresh tokens, blocks all protected routes during the restricted session, forces password change, rejects reuse/expiry, and allows a fresh normal sign-in afterward. No recovery email is sent.
 8. Student submits a club join request twice; only one membership/request exists and the UI shows the resulting state.
+9. **Promoted P1 daily comments:** Teacher sends one scoped comment to selected Students; retry does not duplicate successful recipients; the linked Parent and policy-eligible Student can read only the intended record while unrelated accounts cannot.
 
 Each scenario owns its data or uses a fresh database snapshot. Tests must not depend on execution order unless the file represents one named cross-client journey; setup must make that dependency explicit.
 
@@ -1315,7 +1393,7 @@ A gate passes only when all of the following are true:
 
 ### 14.7. Autonomous Coding and Verification Loop
 
-For each user-requested bounded slice, the agent follows this loop without waiting for routine confirmation:
+For each user-requested bounded slice, the agent follows the smallest applicable path without waiting for routine confirmation. `Small` uses `INSPECT -> CONTRACT -> IMPLEMENT or allowed no-code action -> narrow STATIC_BUILD/check -> combined REVIEW_UNIT -> HANDOFF`; it skips environment, RED_QA, checkpoint, cross-client, and branch review states that do not apply. `Standard` and `Critical` use the full sequence below, but `CROSS_CLIENT` runs only when Section 14.4 requires it. `COMMIT_UNIT` runs only when Section 2.3 grants local-commit authorization; otherwise record a reviewed commit-ready boundary and leave Git history unchanged.
 
 Use these states in order. A state is complete only when its exit evidence is written to the current checkpoint:
 
@@ -1324,24 +1402,24 @@ Use these states in order. A state is complete only when its exit evidence is wr
 | `INSPECT` | Read this file, relevant code/mockup/API, Git baseline, existing checkpoint/run manifest, and QA coverage | Known baseline and no unexplained overlapping change |
 | `CONTRACT` | Write the Section 0.3 slice contract and map change impact mechanically through Section 14.4.2 | Numbered acceptance checks and required gates |
 | `PLAN` | For a non-trivial slice, write the exact-file, dependency-ordered implementation plan defined below and challenge it for scope/YAGNI | Every task maps to acceptance, RED scenario, commands, and atomic commit |
-| `RED_QA` | Add the smallest disposable black-box scenario for the next behavior/bug and run it before production code | It fails for the expected missing/incorrect behavior, not a typo/environment error |
+| `RED_QA` | For a new behavior/bug, add the smallest disposable black-box scenario and run it before production code; documentation/configuration and other allowed Section 14.7.2 exceptions record the reason instead | It fails for the expected missing/incorrect behavior, not a typo/environment error, or a valid exception is recorded |
 | `IMPLEMENT` | Make the smallest production change for one acceptance unit; update contract/migration and affected typed clients together | Intentional diff reviewed; no test-only production branch |
 | `STATIC_BUILD` | Format/analyze/lint and build touched/affected artifacts | Commands exit `0`; artifact identity recorded |
 | `TARGETED_QA` | Start/resume the exact local harness and run the narrowest positive plus invalid/forbidden scenario | Persisted state and authorization assertions pass |
 | `DIAGNOSE` | On failure, preserve evidence, fingerprint, reproduce once, classify, choose one root-cause hypothesis, and apply one bounded fix | A relevant state change exists before re-run |
-| `REVIEW_UNIT` | Run separate specification-compliance and code-quality/security reviews against requirements, plan, diff, and evidence | No unresolved Blocker/Major finding; fixes reverified |
-| `COMMIT_UNIT` | Apply Section 2.3 to the green acceptance unit/layer; stage explicit paths and review the complete index diff | Atomic local commit hash/subject/gates recorded; no in-scope green blob left behind |
-| `CROSS_CLIENT` | Rebuild stale artifacts and run affected consumer/phase journey against the same API/database | Required cross-client gate passes without retry/skip |
-| `REVIEW_BRANCH` | Review the complete baseline-to-HEAD branch for integration gaps, scope drift, architecture, security, and missing verification | No unresolved Blocker/Major finding; any correction is a green atomic fix commit |
+| `REVIEW_UNIT` | For Standard/Critical units, run separate specification-compliance and code-quality/security reviews; a Small slice may combine them into one recorded self-review | No unresolved Blocker/Major finding; fixes reverified |
+| `COMMIT_UNIT` | When Section 2.3 authorizes commits, apply it to the green acceptance unit/layer; stage explicit paths and review the complete index diff | Atomic local commit hash/subject/gates recorded; otherwise a commit-ready boundary is recorded without staging |
+| `CROSS_CLIENT` | When required by the change-impact/phase gate, rebuild stale artifacts and run affected consumer journey against the same API/database | Required cross-client gate passes without retry/skip, or state is documented as not applicable |
+| `REVIEW_BRANCH` | For Standard/Critical branch work, review the complete baseline-to-current diff/authorized commit range for integration gaps, scope drift, architecture, security, and missing verification | No unresolved Blocker/Major finding; any correction is reverified and committed only when authorized |
 | `HANDOFF` | Compare final diff to baseline, teardown when no immediate follow-up run is needed, and complete Section 16 | Self-contained result/checkpoint with no unexplained resource or file |
 
 Operational loop:
 
-1. Execute `INSPECT`, `CONTRACT`, and when required `PLAN` once per bounded slice; do not code from the roadmap title alone. Run `qa/scripts/preflight.ps1` before broad edits to verify the affected SDKs/tools, writable paths, SQL connectivity, emulator availability when Mobile is affected, and Gmail connectivity only when Email is affected. A missing required prerequisite is discovered early and reported precisely, not after hours of unrelated implementation.
-2. Break acceptance into the smallest dependency-ordered units. For each new behavior/bug cycle `RED_QA -> IMPLEMENT -> STATIC_BUILD -> TARGETED_QA -> REVIEW_UNIT -> COMMIT_UNIT`; do not implement several unrelated screens before obtaining the first vertical passing path or accumulate multiple green units in one uncommitted blob.
+1. Execute `INSPECT`, `CONTRACT`, and when required `PLAN` once per bounded slice; do not code from the roadmap title alone. Run `qa/scripts/preflight.ps1` before broad edits to verify only affected prerequisites: the owning SDK/toolchain, SQL when a database/API integration gate is required, an emulator when Mobile E2E is required, storage when files are active, and Gmail only when Email is affected. A missing required prerequisite is discovered early and reported precisely, not after hours of unrelated implementation.
+2. Break acceptance into the smallest dependency-ordered units. For each Standard/Critical new behavior/bug cycle `RED_QA -> IMPLEMENT -> STATIC_BUILD -> TARGETED_QA -> REVIEW_UNIT`, then `COMMIT_UNIT` when authorized; do not implement several unrelated screens before obtaining the first vertical passing path. Without commit authorization, keep each reviewed unit explicitly classified in the handoff rather than staging or mutating history.
 3. On failure enter `DIAGNOSE`. Define the failure fingerprint as `{command/scenario, exit code or timeout, first stable error code/message, failing route/test step}`. Cosmetic timestamps, ports, GUIDs, and line numbers do not create a new fingerprint.
 4. Reproduce once without editing. If the fingerprint is the same, investigate the earliest incorrect boundary/state, compare an equivalent working path, state one falsifiable root-cause hypothesis, and change only the smallest cause. Invalidate every affected prior result and return through the required RED/green gates. If reproduction passes, classify as Flaky and follow Section 14.6; it is not a pass.
-5. After each reviewed green layer/unit, create its atomic local commit before starting unrelated work. Then run `CROSS_CLIENT` whenever the completed contract/shared journey crosses products, followed by `REVIEW_BRANCH` for the full branch. A page render, HTTP `200`, successful compilation, existence of commits, or reviewer opinion without commands is insufficient.
+5. After each reviewed green layer/unit, create its atomic local commit before starting unrelated work only when Section 2.3 authorizes commits. Run `CROSS_CLIENT` whenever the completed contract/shared journey crosses products, followed by `REVIEW_BRANCH` for Standard/Critical branch work. A page render, HTTP `200`, successful compilation, existence of commits, or reviewer opinion without commands is insufficient.
 6. Enter `HANDOFF` only after every acceptance check maps to fresh evidence and branch review is clear. Otherwise report `incomplete` or `blocked`, never “mostly done” as complete.
 
 Guardrails:
@@ -1400,7 +1478,7 @@ Classify findings as `Blocker` (security/data loss/fundamental requirement failu
 
 #### 14.7.4. Checkpoint and Resume Protocol for Long Runs
 
-After every state transition, every failed command, every applied fix, and before any context handoff/interruption, overwrite `qa/artifacts/<runId>/checkpoint.md` with a concise redacted snapshot:
+Checkpoint cadence follows the Section 14.4.3 tier. For a Critical slice, update after every state transition, failed command, and applied fix. For a Standard slice, update at acceptance-unit boundaries, failures, commits, and handoff/interruption. A Small slice needs no `qa/` checkpoint unless it becomes long-running or crosses a context handoff; its working update and final evidence are sufficient. When a checkpoint is required, overwrite `qa/artifacts/<runId>/checkpoint.md` with a concise redacted snapshot:
 
 ```text
 Slice/acceptance unit:
@@ -1421,7 +1499,7 @@ Known limitations/blocker:
 
 Never include `.env` values, connection strings, App Passwords, JWTs, temporary user passwords, email bodies, or real personal data. The checkpoint is operational memory, not proof by itself; command results and result manifest remain the evidence.
 
-On resume, read this file and `AGENTS.md` first, then re-run Git status and validate the run manifest. Trust a recorded pass only when its artifact identity still matches current sources/config/migration/fixture inputs. Mark affected gates `stale` after any relevant change and continue from the first non-passing state; do not restart the whole project, repeat completed unaffected work, or claim completion from a stale checkpoint.
+On resume, reload the instruction sections required by Section 0.5, then re-run Git status and validate the run manifest. Trust a recorded pass only when its artifact identity still matches current sources/config/migration/fixture inputs. Mark affected gates `stale` after any relevant change and continue from the first non-passing state; do not restart the whole project, repeat completed unaffected work, or claim completion from a stale checkpoint.
 
 If new user edits appear during the run, compare them to the baseline. Preserve and continue when paths are unrelated; if they overlap the current slice or invalidate an assumption, stop before overwriting and report the exact overlap.
 
@@ -1459,26 +1537,34 @@ When implementing the harness, prefer current official documentation and verify 
 
 Start a phase only when the user explicitly requests it. A request may intentionally select a smaller slice than a complete phase.
 
-1. **Requirements and UX:** confirm MVP boundaries, key screens, role permissions, and core domain rules.
-2. **Database and Backend Core:** solution structure, identity, entities, relationships, migrations, authentication, authorization, and seed strategy.
-3. **Backend School Features:** classes, relationships, attendance, leave requests, daily comments, grades/evaluations, timetable, events, clubs/membership, homework/submissions/grading, and announcements.
-4. **Web Import, Gmail Email, and Account Support:** import template/validation/commit/history, Gmail App-Password email composition/delivery/tracking, password-help queue, and temporary-password issuance.
-5. **Flutter Foundation:** project structure, design system, networking, Riverpod, routing, authentication, and role-aware shell.
-6. **Teacher Experience:** dashboard/class context, attendance, leave review, daily comments, homework/submission grading, grade entry/evaluations, class feed/announcements, and the scoped Teacher web dashboard.
-7. **Parent and Student Experience:** child context, required Home screen flow, grades, timetable, events, leave requests, clubs/membership, Student homework submission, other scoped academic information, and announcements.
-8. **Web Administration:** management UI, authorization, import center, email/announcement center, and audit views.
-9. **Hardening and Integration:** end-to-end integration, tests, security review, accessibility, performance, local demo/release configuration, and documentation.
+Every roadmap item is a vertical slice: introduce only the domain/data/API needed by the named client behavior, wire its actual consumers, and pass its gate before broadening scope. Do not implement all entities/endpoints first, postpone all clients, or defer integration to a final phase.
+
+1. **Executable Skeleton:** root configuration, minimal four-project Backend boundary, health/readiness, minimal React/Flutter shells, safe Development/QA bootstrap path, and QA smoke harness. Do not scaffold feature entities/screens.
+2. **P0A Authentication and Assisted Access:** Backend Identity/session/resource-role foundation; Flutter login/password-help/forced-change/role Home entry for Teacher/Parent/Student and Administrator-only rejection; React Administrator/Teacher eligibility plus Administrator password-help queue/temporary-password issuance and Parent/Student-only rejection; logout/session restoration.
+3. **P0B School Directory and Fixed Import:** school year/class/subject minimum, profiles and relationships, Administrator Web management sufficient for the demo, fixed versioned workbook upload/header verification/row validation/transactional commit, and imported-account sign-in/scoping.
+4. **P0C-1 Mobile Information Flow:** role-aware Flutter Home plus read-only grades/detail, timetable, events/detail, announcements, and exact guarded navigation using authorized synthetic/imported records.
+5. **P0C-2 Clubs:** Flutter discovery/search/filter/detail and Student idempotent join/request with eligibility/scope enforcement. P0C is complete only after both P0C-1 and P0C-2 pass; they remain separate vertical slices for manageable implementation/review.
+6. **P0D Leave and Attendance:** Parent Flutter leave create/history/detail/cancel, Teacher Flutter queue/decision and attendance save/reopen, Parent/Student attendance visibility, attachments only if included in the active slice, and reconciliation behavior.
+7. **P0E Announcement and Gmail:** Administrator/Teacher React composition with server audience preview, immediate Portal App/Gmail send, basic current delivery result, and authorized Flutter inbox visibility.
+8. **Promoted P1 Daily Comments:** Teacher Flutter create/review/send plus permitted Parent/Student read and retry idempotency.
+9. **Promoted P1 Homework:** Teacher publish, Student text/file submission, Teacher basic grading, and authorized Student/Parent result.
+10. **Promoted P1 Grade Entry:** Teacher Flutter batch entry/validation/concurrency plus Student/Parent read-back.
+11. **Promoted P1 Feed, Histories, and Teacher Web:** text-first class feed, announcement read state, import/delivery history, audit view, and scoped read-focused Teacher Web dashboard/schedule.
+12. **Milestone Rehearsal and Release:** run the active milestone journeys against one current worktree/database, fix integration/accessibility/visual issues, prepare synthetic demo data, and perform Section 14.8 cleanup only after explicit user approval.
+
+P1 roadmap items are dormant until the user explicitly starts/promotes them. Finishing P0 does not authorize starting P1 automatically.
 
 ### 15.1. Phase Gates
 
-- **Foundation gate:** sign-in failure/success, logout, session restoration, token refresh, generic password-help request, Administrator temporary-password issuance, forced password change, single-role redirect, and multi-role selection work with tests.
-- **Domain/API gate:** migrations apply to a clean development database; authorization prevents cross-class/cross-child access; core API integration tests pass.
-- **Mobile feature gate:** all three dashboards render the correct scoped data; Login/Password Help/Forced Password Change/Home and every required Home destination (Grades, Timetable, Events, Leave Requests, Clubs) work without dead links; navigation and loading/empty/error states pass on an Android emulator.
-- **School workflow gate:** leave-request and attendance journeys work end-to-end, including validation, status transitions, and repeat/edit behavior.
-- **P1 functional-completion gate:** Teacher daily comments, homework publication/submission/grading, grade-entry batch save, class-feed composition, announcement read state, delivery/import history, and Teacher web dashboard work with authorization and failure-state tests.
-- **Web operations gate:** import preview/commit/error download and email preview/send/history work with audit records and authorization tests.
-- **Three-product integration gate:** the .NET 10 API Release build, React production build, and Flutter Android APK are produced from the same current worktree; Web and Flutter both complete their affected journeys against one local API and one isolated local SQL Server QA database, with the dedicated Gmail test account used only when email is affected and artifact identities recorded.
-- **Release/demo gate:** analyzer/linter, builds, tests, and all twelve core demo journeys in Section 3.2 pass using synthetic demo data.
+- **Executable-skeleton gate:** .NET 10 API Release build/readiness, React production build, Android APK build, root configuration validation, and a safe known-pass/known-fail QA smoke work without feature placeholders.
+- **P0A authentication gate:** sign-in failure/success, React accepts only Administrator/Teacher contexts, Flutter accepts only Teacher/Parent/Student contexts, unsupported-role sessions are cleared, logout, session restoration, token refresh, generic password-help request, Administrator temporary-password issuance, forced password change, single-role redirect, supported multi-role selection, and protected-route denial pass end-to-end.
+- **P0B directory/import gate:** migrations apply to a fresh QA database; invalid references/duplicates produce row errors without domain writes; a valid fixed workbook commits once; imported accounts authenticate and receive only relationship-scoped data.
+- **P0C Mobile-information gate:** after both P0C-1 and P0C-2, role-aware Home plus Grades, Timetable, Events, Clubs, Announcements, and Profile work without dead links for every role to which each capability applies; grade/event drill-down, club idempotency, Parent-child/Student-own/Teacher-assignment authorization, and loading/empty/error states pass on Android.
+- **P0D school-workflow gate:** Leave Requests/status has working list/create/detail routes, and Parent leave plus Teacher decision and Teacher attendance save/reopen work end-to-end, including validation, authorization, status transitions, idempotency, cancellation, and reconciliation behavior.
+- **P0E communication gate:** Web audience preview/confirmation and immediate Portal App/Gmail delivery produce deduplicated basic recipient results; intended Flutter inboxes receive the persisted announcement; unrelated users and real/non-test QA recipients are excluded.
+- **Promoted P1 slice gate:** only the named P1 journey is added to the active milestone and must pass its feature-specific authorization, failure-state, persistence, and actual-consumer checks before that slice is complete.
+- **Assignment-demo gate:** the .NET 10 API Release build, React production build, and Flutter Android APK come from the same current worktree; all nine P0 journeys in Section 3.2 pass against one isolated local SQL Server QA database with synthetic data, and Gmail is exercised only by the communication journey.
+- **Extended-product gate:** the Assignment-demo gate plus every explicitly promoted P1 journey passes. Dormant P1/P2 work is not a failure.
 
 If a gate fails, report the exact failure and finish that gate before moving to dependent work unless the user explicitly reprioritizes.
 
@@ -1488,20 +1574,20 @@ A requested coding task is complete only when:
 
 - The requested behavior and authorization rules are implemented without silently expanding scope.
 - Validation, error, loading, and empty states appropriate to the task are handled.
-- Every non-trivial slice has the Section 14.7.1 exact-file plan, and the final implementation has no unexplained drift from it.
+- Every Standard/Critical non-trivial slice has the Section 14.7.1 exact-file plan, and the final implementation has no unexplained drift from it. A Small slice uses the Section 0.3 contract without a redundant long plan.
 - Every new behavior/bug has a valid observed RED acceptance scenario before its production change, or an allowed Section 14.7.2 exception with a recorded reason; GREEN was then observed after the minimal implementation.
-- Relevant disposable QA scenarios are added or updated under `qa/` and pass; no test code/dependency is added to a product directory.
-- Relevant formatter, analyzer/linter, production build, API integration, and UI E2E commands have been run, or any blocker is reported precisely.
-- For Flutter work, normally run `flutter pub get`, `dart format --output=none --set-exit-if-changed .`, `flutter analyze`, a production-representative Android APK build, and relevant external Maestro flows.
-- For Backend work, verify the selected SDK with `dotnet --info`, require .NET 10/`net10.0`, run `dotnet restore`, `dotnet build --configuration Release --no-restore`, apply migrations to the disposable SQL Server database, and run external API/integration scenarios.
-- For React work, run the lockfile-matched clean install (for example `npm ci` when using `package-lock.json`), configured TypeScript type-check and lint, production Vite build, and external Playwright scenarios against the real API.
-- Scope fast commands to touched components during iteration, but run every affected consumer and the Three-product integration gate before completing a cross-client or API-contract task.
+- Relevant disposable QA scenarios are added or updated under `qa/` and pass for Standard/Critical behavior. A documentation-only Small slice performs structural/path/consistency checks without creating the QA harness. No test code/dependency is added to a product directory.
+- Every formatter, analyzer/linter, production build, API integration, and UI E2E command required by the selected Section 14.4 tier/change-impact row has been run; unrelated product/tool gates are not required. Any required blocker is reported precisely.
+- For Standard/Critical Flutter work, run the relevant subset of `flutter pub get`, format check, `flutter analyze`, Android APK build, and external Maestro flow required by Section 14.4.2/14.4.3; Critical Mobile journeys require the production-representative APK.
+- For Standard/Critical Backend work, verify .NET 10/`net10.0`, restore/build Release, and run the required external API/integration scenarios; apply migrations to disposable SQL Server only when persistence/migration behavior is affected or a milestone gate requires it.
+- For Standard/Critical React work, run the lockfile-matched install when dependencies are absent/changed, configured TypeScript type-check/lint, production Vite build, and targeted external Playwright scenarios required by the selected tier.
+- Scope fast commands to touched components during iteration. Run every actual affected consumer before completing a contract task; run the full three-product integration gate only for the triggers in Section 14.4.1 or an active milestone/release gate.
 - No secrets or real personal data are introduced.
 - API/schema/configuration changes are documented where future phases depend on them.
 - The final diff has been compared with the Section 2.2 baseline; every changed path is intentional/classified, no user-owned change was overwritten, and no affected result is stale.
-- The final checkpoint/result manifest maps every numbered acceptance check to a fresh command/scenario result and records exact teardown status. An unrun, skipped, retry-only, stale, or blocked required gate makes the outcome `incomplete` or `blocked`, not `completed`.
-- The Section 14.7.3 specification-compliance and code-quality/security reviews passed for each committed acceptance unit and for the final branch; no Blocker/Major finding remains unresolved, and reviewer independence or the self-review fallback is recorded.
-- Section 2.3 was followed: commits are atomic and ordered for review, each hash/gate is recorded, no commit contains unrelated/pre-existing/generated/secret content, and no completed in-scope change remains uncommitted. Nothing was pushed or history-rewritten without explicit instruction.
+- For Standard/Critical work, the final checkpoint/result manifest maps every numbered acceptance check to a fresh command/scenario result and records exact teardown status. A Small slice records commands/results in the final handoff. An unrun, skipped, retry-only, stale, or blocked required gate makes the outcome `incomplete` or `blocked`, not `completed`.
+- The Section 14.7.3 reviews appropriate to the tier passed: separate specification and quality/security passes for Standard/Critical units and final branch, or one combined recorded self-review for a Small slice. No Blocker/Major finding remains unresolved.
+- When Section 2.3 grants local-commit authorization, commits are atomic and ordered for review, each hash/gate is recorded, no commit contains unrelated/pre-existing/generated/secret content, and no completed in-scope change remains as an unexplained blob. Without that authorization, no Git mutation is performed and the handoff identifies commit-ready units/changed paths instead. Nothing is pushed or history-rewritten without explicit instruction.
 - The final response summarizes changed files, verification performed, remaining limitations, and the next logical phase without starting it automatically.
 
 Compilation alone is not completion. If a required environment or gate cannot run, report the task as incomplete/blocked with the exact command, failure, evidence path, and safe next action; do not describe it as done.
