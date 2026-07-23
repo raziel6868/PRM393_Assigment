@@ -17,6 +17,7 @@ import {
   configureAccessToken,
   getAccessToken,
   setAccessToken,
+  type AuthSessionResponse,
 } from '../api/client';
 import { isApiError } from '../api/errors';
 import type { SchoolRole } from '../shared/config';
@@ -36,7 +37,7 @@ export type AuthState =
 
 type AuthContextValue = {
   state: AuthState;
-  signIn: (input: SignInRequest) => Promise<void>;
+  signIn: (input: SignInRequest) => Promise<AuthSessionResponse>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   changeTemporaryPassword: (input: ChangeTemporaryPasswordRequest) => Promise<void>;
@@ -101,6 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       const response = await authApi.signIn(input);
       setAccessToken(response.accessToken);
       applySession(response);
+      return response;
     },
     [applySession],
   );

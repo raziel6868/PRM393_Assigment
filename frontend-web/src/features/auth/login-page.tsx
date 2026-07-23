@@ -18,8 +18,8 @@ export function LoginPage(): JSX.Element {
     setError(null);
     setSubmitting(true);
     try {
-      await signIn({ emailOrUserName: values.emailOrUserName.trim(), password: values.password, clientType: 'web' });
-      navigate('/dashboard', { replace: true });
+      const session = await signIn({ emailOrUserName: values.emailOrUserName.trim(), password: values.password, clientType: 'web' });
+      navigate(session.passwordChangeRequired ? '/change-temporary-password' : '/dashboard', { replace: true });
     } catch (err) {
       if (isApiError(err) && err.code === 'temporaryPasswordExpired') {
         navigate('/password-help', { replace: true });

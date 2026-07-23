@@ -30,6 +30,11 @@ export function SessionGuard({ children }: GuardProps): JSX.Element {
   }
 
   if (isRestricted(state)) {
+    // The forced-change route must be reachable even when the restricted
+    // session is still active; everything else must funnel into it.
+    if (location.pathname === '/change-temporary-password') {
+      return <>{children}</>;
+    }
     return <Navigate to="/change-temporary-password" replace state={{ from: location }} />;
   }
 
