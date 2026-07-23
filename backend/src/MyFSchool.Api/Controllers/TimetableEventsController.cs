@@ -10,12 +10,12 @@ namespace MyFSchool.Api.Controllers;
 
 [ApiController]
 [Authorize(Policy = SchoolPolicies.AuthenticatedSession)]
-[Route("api/v1/timetable")]
+[Route("api/v1/schedule")]
 public sealed class TimetableController(ITimetableQueryService timetableService) : ControllerBase
 {
-    [HttpGet("weeks/{weekStart:regex(\\d{{4}}-\\d{{2}}-\\d{{2}})}")]
-    public async Task<IActionResult> GetWeekTimetable(
-        string weekStart,
+    [HttpGet("weekly")]
+    public async Task<IActionResult> GetWeeklyTimetable(
+        [FromQuery] string weekStart,
         [FromQuery] Guid? studentProfileId,
         CancellationToken cancellationToken)
     {
@@ -45,22 +45,16 @@ public sealed class TimetableController(ITimetableQueryService timetableService)
 [Route("api/v1/events")]
 public sealed class EventsController(IEventQueryService eventService) : ControllerBase
 {
-    [HttpGet("upcoming")]
-    public async Task<IActionResult> GetUpcoming(
+    [HttpGet]
+    public async Task<IActionResult> GetEvents(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken cancellationToken = default)
     {
         var userId = TryGetUserId(out var uid) ? uid : (Guid?)null;
         var role = ResolveRole();
-        var studentProfileId = (Guid?)null;
 
-        if (role == "parent")
-        {
-            // Parent uses studentProfileId from query if provided; else just return all
-        }
-
-        var result = await eventService.GetUpcomingEventsAsync(userId, role, studentProfileId, page, pageSize, cancellationToken);
+        var result = await eventService.GetUpcomingEventsAsync(userId, role, null, page, pageSize, cancellationToken);
         if (!result.IsSuccess)
             return StatusCode(400, new ProblemDetails { Status = 400, Title = "Không thể tải sự kiện" });
         return Ok(result.Value!);
