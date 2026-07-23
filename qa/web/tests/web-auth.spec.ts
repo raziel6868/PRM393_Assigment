@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
+import { QA_API_ORIGIN } from '../playwright.config';
 
 const administratorUserName = process.env.QA_ADMIN_USERNAME;
 const administratorPassword = process.env.QA_ADMIN_PASSWORD;
@@ -15,15 +16,31 @@ async function signOut(page: Page): Promise<void> {
   });
 }
 
+function api(path: string): string {
+  return `${QA_API_ORIGIN}${path}`;
+}
+
 test.describe('@web-auth portal authentication', () => {
-  test('administrator sign-in redirects to dashboard', async ({ page }) => {
+  test('administrator sign-in redirects to dashboard', async ({ page, request }) => {
+    // Look up display name via API to assert against the actual UI text.
+    const adminSession = await request.post(api('/api/v1/auth/sign-in'), {
+      data: { emailOrUserName: administratorUserName!, password: administratorPassword!, clientType: 'web' },
+      headers: { origin: 'http://localhost:5173' },
+    });
+    expect(adminSession.status()).toBe(200);
+    const adminSessionBody = await adminSession.json();
+    const administratorDisplayName: string = adminSessionBody.displayName;
+    await request.post(api('/api/v1/auth/logout'), {
+      headers: { origin: 'http://localhost:5173', authorization: `Bearer ${adminSessionBody.accessToken}` },
+    });
+
     await page.goto('/login');
     await page.getByLabel('Email hoặc mã tài khoản').fill(administratorUserName!);
     await page.getByLabel('Mật khẩu', { exact: false }).first().fill(administratorPassword!);
     await page.getByRole('button', { name: 'Đăng nhập' }).click();
 
     await page.waitForURL(/\/dashboard$/);
-    await expect(page.getByText(administratorUserName!)).toBeVisible();
+    await expect(page.getByText(administratorDisplayName).first()).toBeVisible();
   });
 
   test('invalid credentials show inline error without navigation', async ({ page }) => {
@@ -38,7 +55,7 @@ test.describe('@web-auth portal authentication', () => {
 
   test('restricted session cannot reach dashboard; must use change-temporary-password', async ({ page, request }) => {
     // Create a Teacher through the API to obtain a temporary password + restricted session.
-    const provisionResponse = await request.post('/api/v1/admin/users', {
+    const provisionResponse = await request.post(api('/api/v1/admin/users'), {
       data: {
         displayName: 'Giáo viên Web QA',
         userName: `web-teacher-${Date.now()}`,
@@ -50,7 +67,7 @@ test.describe('@web-auth portal authentication', () => {
     expect(provisionResponse.status()).toBe(201);
     const provisioned = await provisionResponse.json();
 
-    const restrictedSignIn = await request.post('/api/v1/auth/sign-in', {
+    const restrictedSignIn = await request.post(api('/api/v1/auth/sign-in'), {
       data: {
         emailOrUserName: provisioned.userName,
         password: provisioned.temporaryPassword,
@@ -73,7 +90,7 @@ test.describe('@web-auth portal authentication', () => {
 });
 
 async function obtainAdminToken(request: import('@playwright/test').APIRequestContext): Promise<string> {
-  const response = await request.post('/api/v1/auth/sign-in', {
+  const response = await request.post(api('/api/v1/auth/sign-in'), {
     data: {
       emailOrUserName: administratorUserName!,
       password: administratorPassword!,

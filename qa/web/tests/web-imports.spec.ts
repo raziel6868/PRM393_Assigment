@@ -1,6 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type APIRequestContext } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { QA_API_ORIGIN } from '../playwright.config';
 
 const administratorUserName = process.env.QA_ADMIN_USERNAME;
 const administratorPassword = process.env.QA_ADMIN_PASSWORD;
@@ -12,8 +13,12 @@ if (!administratorUserName || !administratorPassword) {
   throw new Error('QA_ADMIN_USERNAME and QA_ADMIN_PASSWORD are required.');
 }
 
-async function adminToken(request: import('@playwright/test').APIRequestContext): Promise<string> {
-  const response = await request.post('/api/v1/auth/sign-in', {
+function api(path: string): string {
+  return `${QA_API_ORIGIN}${path}`;
+}
+
+async function adminToken(request: APIRequestContext): Promise<string> {
+  const response = await request.post(api('/api/v1/auth/sign-in'), {
     data: {
       emailOrUserName: administratorUserName!,
       password: administratorPassword!,
@@ -31,7 +36,6 @@ async function adminToken(request: import('@playwright/test').APIRequestContext)
 async function buildValidFixture(): Promise<Buffer> {
   const fixtureProject = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
-    '..',
     '..',
     '..',
     'scripts',
@@ -118,7 +122,7 @@ test.describe('@web-imports end-to-end', () => {
   test('non-administrator role cannot reach /imports', async ({ page, request }) => {
     const adminAccessToken = await adminToken(request);
     const marker = Date.now();
-    const provisionResponse = await request.post('/api/v1/admin/users', {
+    const provisionResponse = await request.post(api('/api/v1/admin/users'), {
       data: {
         displayName: 'Phụ huynh bị từ chối Web',
         userName: `web-parent-${marker}`,

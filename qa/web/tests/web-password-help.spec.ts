@@ -1,4 +1,5 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type APIRequestContext } from '@playwright/test';
+import { QA_API_ORIGIN } from '../playwright.config';
 
 const administratorUserName = process.env.QA_ADMIN_USERNAME;
 const administratorPassword = process.env.QA_ADMIN_PASSWORD;
@@ -7,8 +8,12 @@ if (!administratorUserName || !administratorPassword) {
   throw new Error('QA_ADMIN_USERNAME and QA_ADMIN_PASSWORD are required.');
 }
 
-async function adminToken(request: import('@playwright/test').APIRequestContext): Promise<string> {
-  const response = await request.post('/api/v1/auth/sign-in', {
+function api(path: string): string {
+  return `${QA_API_ORIGIN}${path}`;
+}
+
+async function adminToken(request: APIRequestContext): Promise<string> {
+  const response = await request.post(api('/api/v1/auth/sign-in'), {
     data: {
       emailOrUserName: administratorUserName!,
       password: administratorPassword!,
@@ -29,7 +34,7 @@ test.describe('@web-password-help administrator queue', () => {
 
     // Provision a teacher so we have a Pending password-help request to display.
     const marker = Date.now();
-    const provisionResponse = await request.post('/api/v1/admin/users', {
+    const provisionResponse = await request.post(api('/api/v1/admin/users'), {
       data: {
         displayName: 'Giáo viên Hỗ trợ Web',
         userName: `web-ph-teacher-${marker}`,
@@ -41,7 +46,7 @@ test.describe('@web-password-help administrator queue', () => {
     expect(provisionResponse.status()).toBe(201);
     const provisioned = await provisionResponse.json();
 
-    const helpResponse = await request.post('/api/v1/auth/password-help-requests', {
+    const helpResponse = await request.post(api('/api/v1/auth/password-help-requests'), {
       data: { emailOrUserName: provisioned.email ?? provisioned.userName },
       headers: { origin: 'http://localhost:5173' },
     });
@@ -65,7 +70,7 @@ test.describe('@web-password-help administrator queue', () => {
 
     const modal = page.getByRole('dialog');
     await expect(modal).toBeVisible();
-    await expect(modal.getByText(/Mật khẩu tạm/)).toBeVisible();
+    await expect(modal.getByText(/Mật khẩu tạm/).first()).toBeVisible();
 
     // Ensure the temporary password value is rendered (length >= 12 expected by API contract).
     const passwordValue = await modal.locator('code').innerText();
