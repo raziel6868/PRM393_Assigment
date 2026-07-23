@@ -46,13 +46,8 @@ class AppTheme {
           backgroundColor: primaryOrange,
           foregroundColor: Colors.white,
           minimumSize: const Size(double.infinity, 48),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-          textStyle: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -60,9 +55,7 @@ class AppTheme {
           foregroundColor: primaryOrange,
           minimumSize: const Size(double.infinity, 48),
           side: const BorderSide(color: border),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -84,7 +77,10 @@ class AppTheme {
           borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: error),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: surfaceRaised,
@@ -100,14 +96,9 @@ class AppTheme {
       chipTheme: ChipThemeData(
         backgroundColor: orangeTint,
         labelStyle: const TextStyle(color: primaryOrange),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
-      dividerTheme: const DividerThemeData(
-        color: border,
-        thickness: 1,
-      ),
+      dividerTheme: const DividerThemeData(color: border, thickness: 1),
       textTheme: const TextTheme(
         headlineLarge: TextStyle(
           fontSize: 28,
@@ -129,18 +120,9 @@ class AppTheme {
           fontWeight: FontWeight.w600,
           color: textPrimary,
         ),
-        bodyLarge: TextStyle(
-          fontSize: 16,
-          color: textPrimary,
-        ),
-        bodyMedium: TextStyle(
-          fontSize: 14,
-          color: textPrimary,
-        ),
-        bodySmall: TextStyle(
-          fontSize: 12,
-          color: textSecondary,
-        ),
+        bodyLarge: TextStyle(fontSize: 16, color: textPrimary),
+        bodyMedium: TextStyle(fontSize: 14, color: textPrimary),
+        bodySmall: TextStyle(fontSize: 12, color: textSecondary),
       ),
     );
   }
