@@ -38,7 +38,9 @@ function Import-RootEnvironment {
 }
 
 function Remove-ImportedEnvironment {
-    param([Parameter(Mandatory)][System.Collections.Generic.List[string]]$ImportedNames)
+    param([System.Collections.Generic.List[string]]$ImportedNames)
+
+    if ($null -eq $ImportedNames -or $ImportedNames.Count -eq 0) { return }
 
     foreach ($name in $ImportedNames | Select-Object -Unique) {
         Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue
