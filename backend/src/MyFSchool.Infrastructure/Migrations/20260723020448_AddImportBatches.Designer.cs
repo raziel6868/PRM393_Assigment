@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using MyFSchool.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using MyFSchool.Infrastructure.Persistence;
 namespace MyFSchool.Infrastructure.Migrations
 {
     [DbContext(typeof(MyFSchoolDbContext))]
-    partial class MyFSchoolDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260723020448_AddImportBatches")]
+    partial class AddImportBatches
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
