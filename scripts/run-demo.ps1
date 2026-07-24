@@ -8,10 +8,12 @@ param(
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $apiProject = Join-Path $repositoryRoot 'backend\src\MyFSchool.Api\MyFSchool.Api.csproj'
+$apiRoot = Split-Path -Parent $apiProject
 $apiAssembly = Join-Path $repositoryRoot "backend\src\MyFSchool.Api\bin\$Configuration\net10.0\MyFSchool.Api.dll"
 $webRoot = Join-Path $repositoryRoot 'frontend-web'
 $viteEntryPoint = Join-Path $webRoot 'node_modules\vite\bin\vite.js'
 $logRoot = Join-Path $repositoryRoot 'qa\.logs'
+$apiErrorLog = Join-Path $logRoot 'demo-backend.err.log'
 $importedEnvironmentNames = [System.Collections.Generic.List[string]]::new()
 $ownedProcesses = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
 . (Join-Path $PSScriptRoot 'env.ps1')
@@ -56,6 +58,7 @@ function Wait-HttpReady {
         [Parameter(Mandatory)][string]$Url,
         [Parameter(Mandatory)][string]$Name,
         [Parameter(Mandatory)][System.Diagnostics.Process]$Process,
+        [string]$ErrorLogPath,
         [int]$TimeoutSeconds = 60
     )
 
@@ -63,7 +66,13 @@ function Wait-HttpReady {
     while ([DateTime]::UtcNow -lt $deadline) {
         $Process.Refresh()
         if ($Process.HasExited) {
-            throw "$Name đã dừng trước khi sẵn sàng (exit code $($Process.ExitCode))."
+            $detail = if ($ErrorLogPath -and (Test-Path -LiteralPath $ErrorLogPath -PathType Leaf)) {
+                (Get-Content -LiteralPath $ErrorLogPath -Tail 12) -join [Environment]::NewLine
+            }
+            else {
+                'Không có stderr log.'
+            }
+            throw "$Name đã dừng trước khi sẵn sàng (exit code $($Process.ExitCode)).`n$detail"
         }
 
         try {
@@ -142,9 +151,9 @@ try {
 
     $apiProcess = Start-Process -FilePath 'dotnet' `
         -ArgumentList @($apiAssembly) `
-        -WorkingDirectory $repositoryRoot `
+        -WorkingDirectory $apiRoot `
         -RedirectStandardOutput (Join-Path $logRoot 'demo-backend.out.log') `
-        -RedirectStandardError (Join-Path $logRoot 'demo-backend.err.log') `
+        -RedirectStandardError $apiErrorLog `
         -WindowStyle Hidden `
         -PassThru
     $ownedProcesses.Add($apiProcess)
@@ -159,7 +168,7 @@ try {
     $ownedProcesses.Add($webProcess)
 
     Write-Host 'Đang chờ Backend và Web sẵn sàng...'
-    Wait-HttpReady -Url "$apiOrigin/health" -Name 'Backend' -Process $apiProcess
+    Wait-HttpReady -Url "$apiOrigin/health" -Name 'Backend' -Process $apiProcess -ErrorLogPath $apiErrorLog
     Wait-HttpReady -Url $webOrigin -Name 'Frontend Web' -Process $webProcess
 
     Write-Host ''
