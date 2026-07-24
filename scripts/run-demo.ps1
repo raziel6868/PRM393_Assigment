@@ -134,7 +134,7 @@ try {
     $apiPort = $apiUri.Port
     $apiProbeHost = if ($apiUri.Host -in @('0.0.0.0', '+', '*')) { '127.0.0.1' } else { $apiUri.Host }
     $apiOrigin = '{0}://{1}:{2}' -f $apiUri.Scheme, $apiProbeHost, $apiPort
-    $webOrigin = 'http://127.0.0.1:5173'
+    $webOrigin = 'http://localhost:5173'
 
     Assert-PortAvailable -Port $apiPort
     Assert-PortAvailable -Port 5173
@@ -159,7 +159,7 @@ try {
     $ownedProcesses.Add($apiProcess)
 
     $webProcess = Start-Process -FilePath 'node' `
-        -ArgumentList @($viteEntryPoint, '--host', '127.0.0.1', '--port', '5173', '--strictPort') `
+        -ArgumentList @($viteEntryPoint, '--host', 'localhost', '--port', '5173', '--strictPort') `
         -WorkingDirectory $webRoot `
         -RedirectStandardOutput (Join-Path $logRoot 'demo-web.out.log') `
         -RedirectStandardError (Join-Path $logRoot 'demo-web.err.log') `
